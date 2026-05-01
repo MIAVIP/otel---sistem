@@ -226,50 +226,7 @@ button{cursor:pointer;background:#222;color:white}
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script></script>
-function kartAlaniKontrol(){
-  const odeme = document.getElementById("odemeYontemi").value;
-  const alan = document.getElementById("kartAlani");
 
-  if(odeme === "Kredi Kartı" || odeme === "Sanal Kart"){
-    alan.style.display = "block";
-    kartlariDoldur();
-  }else{
-    alan.style.display = "none";
-    document.getElementById("kartSec").value = "";
-  }
-}
-
-function kartlariDoldur(){
-  const sec = document.getElementById("kartSec");
-  if(!sec) return;
-
-  sec.innerHTML = `<option value="">Kart seç</option>`;
-
-  kartlar.forEach(kart => {
-    sec.innerHTML += `<option value="${kart.ad}">${kart.ad}</option>`;
-  });
-}
-
-function kartKaydet(){
-  const ad = document.getElementById("yeniKart").value.trim();
-  if(!ad) return alert("Kart adı / son 4 hane yaz kanka.");
-
-  const varMi = kartlar.some(k => k.ad.toLowerCase() === ad.toLowerCase());
-  if(varMi) return alert("Bu kart zaten kayıtlı.");
-
-  kartlar.push({
-    id: Date.now(),
-    ad: ad
-  });
-
-  document.getElementById("yeniKart").value = "";
-  kaydet();
-  kartlariDoldur();
-  document.getElementById("kartSec").value = ad;
-
-  alert("Kart kaydedildi.");
-}
 <script>
 const SUPABASE_URL = "https://mpwspnccuaqyitwghqip.supabase.co";
 const SUPABASE_KEY = "sb_publishable_lWeTQWJVlynCDmQWcdDSVQ_E0AfIJJX";
@@ -935,7 +892,50 @@ function firmaExcelIndir(firma){
     link.click();
     document.body.removeChild(link);
 }
+function kartAlaniKontrol(){
+    const odeme = document.getElementById("odemeYontemi").value;
+    const alan = document.getElementById("kartAlani");
 
+    if(odeme === "Kredi Kartı" || odeme === "Sanal Kart"){
+        alan.style.display = "block";
+        kartlariDoldur();
+    }else{
+        alan.style.display = "none";
+        document.getElementById("kartSec").value = "";
+    }
+}
+
+function kartlariDoldur(){
+    const sec = document.getElementById("kartSec");
+    if(!sec) return;
+
+    sec.innerHTML = '<option value="">Kart seç</option>';
+
+    kartlar.forEach(kart => {
+        sec.innerHTML += `<option value="${kart.ad}">${kart.ad}</option>`;
+    });
+}
+
+function kartKaydet(){
+    const ad = document.getElementById("yeniKart").value.trim();
+
+    if(!ad) return alert("Kart adı / son 4 hane yaz kanka.");
+
+    const varMi = kartlar.some(k => k.ad.toLowerCase() === ad.toLowerCase());
+    if(varMi) return alert("Bu kart zaten kayıtlı.");
+
+    kartlar.push({
+        id: Date.now(),
+        ad: ad
+    });
+
+    document.getElementById("yeniKart").value = "";
+    kartlariDoldur();
+    document.getElementById("kartSec").value = ad;
+
+    kaydet();
+    alert("Kart kaydedildi.");
+}
 verileriYukle();
 if (!veriler) veriler = [];
 if (!musteriler) musteriler = [];
