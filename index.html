@@ -260,25 +260,23 @@ async function verileriYukle() {
 }
 
 async function kaydet() {
-    let { error } = await db
-        .from("ortak_veri")
-        .update({
-            data: {
-                veriler: veriler,
-                musteriler: musteriler,
-                firmalar: firmalar
-            }
-        })
-        .eq("id", 1);
+  let { error } = await db
+    .from("ortak_veri")
+    .update({
+      data: {
+        veriler,
+        musteriler,
+        firmalar
+      }
+    })
+    .eq("id", 1);
 
-    if (error) {
-        console.error("Supabase kayıt hatası:", error);
-        alert("Veri kaydedilemedi. Supabase ayarlarını kontrol et.");
-        return false;
-    }
-
-    console.log("Supabase kaydedildi.");
-    return true;
+  if (error) {
+    console.error("HATA:", error);
+    alert("Supabase kayıt hatası!");
+  } else {
+    console.log("Kaydedildi kanka 😎");
+  }
 }
 
 function sekmeAc(id){
