@@ -117,7 +117,15 @@ button{cursor:pointer;background:#222;color:white}
 
 <br>
 
-<select id="odemeYontemi">
+<select id="odemeYontemi" onchange="kartAlaniKontrol()">
+    <div id="kartAlani" style="display:none;">
+  <select id="kartSec">
+    <option value="">Kart seç</option>
+  </select>
+
+  <input id="yeniKart" placeholder="Yeni kart adı / son 4 hane">
+  <button type="button" onclick="kartKaydet()">Kartı Kaydet</button>
+</div>
     <option value="Havale">Havale</option>
     <option value="Kredi Kartı">Kredi Kartı</option>
     <option value="Sanal Kart">Sanal Kart</option>
@@ -218,7 +226,49 @@ button{cursor:pointer;background:#222;color:white}
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+function kartAlaniKontrol(){
+  const odeme = document.getElementById("odemeYontemi").value;
+  const alan = document.getElementById("kartAlani");
 
+  if(odeme === "Kredi Kartı" || odeme === "Sanal Kart"){
+    alan.style.display = "block";
+    kartlariDoldur();
+  }else{
+    alan.style.display = "none";
+    document.getElementById("kartSec").value = "";
+  }
+}
+
+function kartlariDoldur(){
+  const sec = document.getElementById("kartSec");
+  if(!sec) return;
+
+  sec.innerHTML = `<option value="">Kart seç</option>`;
+
+  kartlar.forEach(kart => {
+    sec.innerHTML += `<option value="${kart.ad}">${kart.ad}</option>`;
+  });
+}
+
+function kartKaydet(){
+  const ad = document.getElementById("yeniKart").value.trim();
+  if(!ad) return alert("Kart adı / son 4 hane yaz kanka.");
+
+  const varMi = kartlar.some(k => k.ad.toLowerCase() === ad.toLowerCase());
+  if(varMi) return alert("Bu kart zaten kayıtlı.");
+
+  kartlar.push({
+    id: Date.now(),
+    ad: ad
+  });
+
+  document.getElementById("yeniKart").value = "";
+  kaydet();
+  kartlariDoldur();
+  document.getElementById("kartSec").value = ad;
+
+  alert("Kart kaydedildi.");
+}
 <script>
 const SUPABASE_URL = "https://mpwspnccuaqyitwghqip.supabase.co";
 const SUPABASE_KEY = "sb_publishable_lWeTQWJVlynCDmQWcdDSVQ_E0AfIJJX";
@@ -229,7 +279,7 @@ let musteriler = [];
 let firmalar = [];
 let secilenMusteriIds = [];
 let duzenlemeIndex = null;
-
+let kartlar = [];
 async function verileriYukle() {
   let { data, error } = await db
     .from("ortak_veri")
@@ -241,6 +291,8 @@ async function verileriYukle() {
     veriler = data.data?.veriler || [];
     musteriler = data.data?.musteriler || [];
     firmalar = data.data?.firmalar || [];
+    kartlar = data.data?.kartlar || [];
+kartlariDoldur();
   } else {
     console.error(error);
   }
@@ -586,6 +638,7 @@ async function ekle(){
     let dosya = await dosyaOku();
 
     let veri={
+        kartBilgisi: document.getElementById("kartSec").value,
         firma:document.getElementById("firma").value,
         otel:document.getElementById("otel").value,
         oda:document.getElementById("oda").value,
@@ -656,6 +709,9 @@ function duzenle(index){
     document.getElementById("notlar").value=item.notlar||"";
     document.getElementById("anaButon").innerText="Güncelle";
     document.getElementById("formBaslik").innerText="İşi Düzenle";
+    kartlariDoldur();
+document.getElementById("kartSec").value = item.kartBilgisi || "";
+kartAlaniKontrol();
 }
 
 function sekmeAcManuel(id){
