@@ -231,32 +231,19 @@ let secilenMusteriIds = [];
 let duzenlemeIndex = null;
 
 async function verileriYukle() {
-    let { data, error } = await db
-        .from("ortak_veri")
-        .select("*")
-        .eq("id", 1)
-        .single();
+  let { data, error } = await db
+    .from("ortak_veri")
+    .select("*")
+    .eq("id", 1)
+    .single();
 
-    if (error) {
-        console.error("Supabase veri çekme hatası:", error);
-        alert("Veriler çekilemedi. Supabase bağlantısını kontrol et.");
-        return;
-    }
-
-    if (data && data.data) {
-        veriler = data.data.veriler || [];
-        musteriler = data.data.musteriler || [];
-        firmalar = data.data.firmalar || [];
-    }
-
-    dashboardGuncelle();
-    listele();
-    musteriListele();
-    faturaListele();
-    odemeListele();
-    raporla();
-
-    console.log("Supabase verileri yüklendi.");
+  if (data) {
+    veriler = data.data?.veriler || [];
+    musteriler = data.data?.musteriler || [];
+    firmalar = data.data?.firmalar || [];
+  } else {
+    console.error(error);
+  }
 }
 
 async function kaydet() {
@@ -899,6 +886,9 @@ function firmaExcelIndir(firma){
 }
 
 verileriYukle();
+if (!veriler) veriler = [];
+if (!musteriler) musteriler = [];
+if (!firmalar) firmalar = [];
 </script>
 </body>
 </html>
