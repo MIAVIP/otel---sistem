@@ -323,41 +323,35 @@ async function kurGetir(){
     }
 }
 
-async function musteriKaydet(){
+function musteriKaydet(){
     let ad = document.getElementById("yeniMusteriAdi").value.trim();
     if(!ad) return alert("Müşteri adı yaz kanka.");
 
-    musteriler.push({id:Date.now(), ad});
+    let yeni = {id:Date.now(), ad};
+    musteriler.push(yeni);
+
+    kaydet(); // 🔥 BU ÖNEMLİ
+
     document.getElementById("yeniMusteriAdi").value="";
-    await kaydet();
     musteriListele();
 }
-
-async function firmaKaydet(){
+function firmaKaydet(){
     let ad = document.getElementById("firma").value.trim();
-
-    if(!ad){
-        alert("Firma adı yaz kanka.");
-        return;
-    }
+    if(!ad) return alert("Firma adı yaz.");
 
     let varMi = firmalar.some(f => f.ad.toLowerCase() === ad.toLowerCase());
-
-    if(varMi){
-        alert("Bu firma zaten kayıtlı.");
-        return;
-    }
+    if(varMi) return alert("Bu firma zaten var.");
 
     firmalar.push({
         id: Date.now(),
         ad: ad
     });
 
-    await kaydet();
+    kaydet(); // 🔥 BU DA
+
     firmaAra();
     alert("Firma kaydedildi.");
 }
-
 function firmaAra(){
     let q = document.getElementById("firma").value.toLowerCase();
     let alan = document.getElementById("firmaSonuclari");
