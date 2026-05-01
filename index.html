@@ -40,7 +40,9 @@ button{cursor:pointer;background:#222;color:white}
     <button onclick="sekmeAc('odemeler')">Ödemeler</button>
     <button onclick="sekmeAc('rapor')">Raporlama</button>
 </div>
+
 <img src="logo.png" style="position: fixed; top: 15px; right: 20px; height: 45px; z-index: 999;">
+
 <div class="container">
 
 <section id="ana" class="section active">
@@ -215,46 +217,76 @@ button{cursor:pointer;background:#222;color:white}
 
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+const SUPABASE_URL = "https://mpwspnccuaqyitwghqip.supabase.co";
+const SUPABASE_KEY = "sb_publishable_lWeTQWJVlynCDmQWcdDSVQ_E0AfIJJX";
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
 let veriler = [];
 let musteriler = [];
 let firmalar = [];
+let secilenMusteriIds = [];
+let duzenlemeIndex = null;
 
 async function verileriYukle() {
-  let { data, error } = await db
-    .from("ortak_veri")
-    .select("*")
-    .eq("id", 1)
-    .single();
+    let { data, error } = await db
+        .from("ortak_veri")
+        .select("*")
+        .eq("id", 1)
+        .single();
 
-  if (data) {
-    veriler = data.data.veriler || [];
-    musteriler = data.data.musteriler || [];
-    firmalar = data.data.firmalar || [];
-  } else {
-    console.error(error);
-  }
+    if (error) {
+        console.error("Supabase veri çekme hatası:", error);
+        alert("Veriler çekilemedi. Supabase bağlantısını kontrol et.");
+        return;
+    }
+
+    if (data && data.data) {
+        veriler = data.data.veriler || [];
+        musteriler = data.data.musteriler || [];
+        firmalar = data.data.firmalar || [];
+    }
+
+    dashboardGuncelle();
+    listele();
+    musteriListele();
+    faturaListele();
+    odemeListele();
+    raporla();
+
+    console.log("Supabase verileri yüklendi.");
 }
 
 async function kaydet() {
-  await db
-    .from("ortak_veri")
-    .update({
-      data: {
-        veriler: veriler,
-        musteriler: musteriler,
-        firmalar: firmalar
-      }
-    })
-    .eq("id", 1);
-}
+    let { error } = await db
+        .from("ortak_veri")
+        .update({
+            data: {
+                veriler: veriler,
+                musteriler: musteriler,
+                firmalar: firmalar
+            }
+        })
+        .eq("id", 1);
 
+    if (error) {
+        console.error("Supabase kayıt hatası:", error);
+        alert("Veri kaydedilemedi. Supabase ayarlarını kontrol et.");
+        return false;
+    }
+
+    console.log("Supabase kaydedildi.");
+    return true;
+}
 
 function sekmeAc(id){
     document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));
     document.getElementById(id).classList.add("active");
 
     document.querySelectorAll(".topbar button").forEach(b=>b.classList.remove("active"));
-    event.target.classList.add("active");
+    if (event && event.target) event.target.classList.add("active");
 
     listele();
     musteriListele();
@@ -306,16 +338,17 @@ async function kurGetir(){
     }
 }
 
-function musteriKaydet(){
+async function musteriKaydet(){
     let ad = document.getElementById("yeniMusteriAdi").value.trim();
     if(!ad) return alert("Müşteri adı yaz kanka.");
 
     musteriler.push({id:Date.now(), ad});
     document.getElementById("yeniMusteriAdi").value="";
-    kaydet();
+    await kaydet();
     musteriListele();
 }
-function firmaKaydet(){
+
+async function firmaKaydet(){
     let ad = document.getElementById("firma").value.trim();
 
     if(!ad){
@@ -335,7 +368,7 @@ function firmaKaydet(){
         ad: ad
     });
 
-    kaydet();
+    await kaydet();
     firmaAra();
     alert("Firma kaydedildi.");
 }
@@ -365,7 +398,8 @@ function firmaSec(ad){
     document.getElementById("firma").value = ad;
     document.getElementById("firmaSonuclari").innerHTML = "";
 }
-function musteriKaydetVeEkle(){
+
+async function musteriKaydetVeEkle(){
     let ad = document.getElementById("musteriAra").value.trim();
     if(!ad) return alert("Müşteri adı yaz.");
 
@@ -374,17 +408,17 @@ function musteriKaydetVeEkle(){
     secilenMusteriIds.push(yeni.id);
 
     document.getElementById("musteriAra").value="";
-    kaydet();
+    await kaydet();
     musteriAra();
     secilenMusterileriGoster();
     musteriListele();
 }
 
-function musteriSil(id){
+async function musteriSil(id){
     if(confirm("Müşteriyi silmek istiyor musun?")){
         musteriler = musteriler.filter(m=>m.id !== id);
         secilenMusteriIds = secilenMusteriIds.filter(mid=>mid !== id);
-        kaydet();
+        await kaydet();
         musteriListele();
         secilenMusterileriGoster();
     }
@@ -608,7 +642,7 @@ async function ekle(){
         veriler.push(veri);
     }
 
-    kaydet();
+    await kaydet();
     formTemizle();
     listele();
     alert("İş kaydedildi kanka.");
@@ -650,10 +684,10 @@ function sekmeAcManuel(id){
     document.getElementById(id).classList.add("active");
 }
 
-function sil(index){
+async function sil(index){
     if(confirm("Bu işi silmek istiyor musun?")){
         veriler.splice(index,1);
-        kaydet();
+        await kaydet();
         listele();
     }
 }
@@ -765,7 +799,9 @@ function raporla(){
     });
 
     alan.innerHTML = html;
-}function firmaIsleriniGoster(firma){
+}
+
+function firmaIsleriniGoster(firma){
     let alan = document.getElementById("raporListesi");
 
     let firmaIsleri = veriler.filter(item => (item.firma || "Firma Yok") === firma);
@@ -842,7 +878,7 @@ function firmaExcelIndir(firma){
         ]);
     });
 
-    let csv = satirlar.map(row => 
+    let csv = satirlar.map(row =>
         row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(";")
     ).join("\n");
 
@@ -863,49 +899,8 @@ function firmaExcelIndir(firma){
     link.click();
     document.body.removeChild(link);
 }
-</script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-<script>
-const SUPABASE_URL = "https://mpwspnccuaqyitwghqip.supabase.co";
-const SUPABASE_KEY = "sb_publishable_lWeTQWJVlynCDmQWcdDSVQ_E0AfIJJX";
-
-const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-let veriler = [];
-let musteriler = [];
-let firmalar = [];
-
-async function verileriYukle() {
-  let { data, error } = await db
-    .from("ortak_veri")
-    .select("*")
-    .eq("id", 1)
-    .single();
-
-  if (data) {
-    veriler = data.data.veriler || [];
-    musteriler = data.data.musteriler || [];
-    firmalar = data.data.firmalar || [];
-  } else {
-    console.error(error);
-  }
-}
-
-async function kaydet() {
-  await db
-    .from("ortak_veri")
-    .update({
-      data: {
-        veriler: veriler,
-        musteriler: musteriler,
-        firmalar: firmalar
-      }
-    })
-    .eq("id", 1);
-}
 
 verileriYukle();
-console.log("Supabase bağlandı kanka 😎");
 </script>
 </body>
 </html>
