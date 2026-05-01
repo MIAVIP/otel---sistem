@@ -843,6 +843,15 @@ function firmaExcelIndir(firma){
     document.body.removeChild(link);
 }
 </script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
+<script>
+const SUPABASE_URL = "https://mpwspnccuaqyitwghqip.supabase.co";
+const SUPABASE_KEY = "sb_publishable_lWeTQWJVlynCDmQWcdDSVQ_E0AfIJJX";
+
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+console.log("Supabase bağlandı kanka 😎");
+</script>
 </body>
 </html>
