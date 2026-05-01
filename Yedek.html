@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>Otel İş Takip</title>
+
+<style>
+body{font-family:Arial,sans-serif;padding:25px;background:#f5f6fa;color:#111}
+.dashboard{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:25px}
+.box,.form,.card{background:white;padding:18px;border-radius:12px;border:1px solid #ddd;margin-bottom:18px}
+.box{min-width:170px}
+.box b{display:block;font-size:14px;color:#555}
+.box span{font-size:22px;font-weight:bold}
+input,button,select,textarea{padding:10px;margin:6px;border:1px solid #aaa;border-radius:6px;font-size:15px}
+textarea{width:92%;min-height:65px}
+button{cursor:pointer;background:#222;color:white}
+.btn-edit{background:#0066cc}
+.btn-delete{background:#8b0000}
+.btn-file{background:#0a7c35}
+.kar{font-weight:bold;font-size:18px}
+.small{color:#666;font-size:14px}
+</style>
+</head>
+
+<body>
+
+<h2>Otel İş Takip Sistemi</h2>
+
+<div class="dashboard">
+    <div class="box"><b>Toplam İş</b><span id="toplamIs">0</span></div>
+    <div class="box"><b>Toplam Maliyet TL</b><span id="toplamMaliyet">0 TL</span></div>
+    <div class="box"><b>Toplam Satış TL</b><span id="toplamSatis">0 TL</span></div>
+    <div class="box"><b>Toplam Kâr TL</b><span id="toplamKar">0 TL</span></div>
+    <div class="box"><b>Kâr Oranı</b><span id="karOrani">0%</span></div>
+    <div class="box"><b>Bekleyen Otel Faturası</b><span id="bekleyenFatura">0</span></div>
+    <div class="box"><b>Kesilmeyen Müşteri Faturası</b><span id="kesilmeyenFatura">0</span></div>
+    <div class="box"><b>Ödeme Bekleyen</b><span id="odemeBekleyen">0</span></div>
+</div>
+<h3>Kart Tanımla</h3>
+
+<input id="kartAdi" placeholder="Kart Adı / Banka / Kime Ait">
+<input id="kartSon4" maxlength="4" placeholder="Son 4 Hane">
+<button onclick="kartEkle()">Kart Kaydet</button>
+
+<div id="kartListesi"></div>
+</div>
+
+<div class="form">
+<h3 id="formBaslik">Yeni İş Ekle</h3>
+
+<input id="firma" placeholder="Firma">
+<input id="otel" placeholder="Otel">
+<input id="oda" type="number" placeholder="Oda Sayısı">
+<input id="odaTipi" placeholder="Oda Tipi">
+
+<br>
+
+<label>Check-in:</label>
+<input id="checkin" type="date">
+
+<label>Check-out:</label>
+<input id="checkout" type="date">
+
+<br>
+
+<input id="misafirler" placeholder="Kalan Kişiler / Misafirler" style="width:420px">
+<input id="talepEden" placeholder="Talep Kimden Geldi?">
+
+<select id="talepKanali">
+    <option value="WhatsApp">WhatsApp</option>
+    <option value="Mail">Mail</option>
+    <option value="Telefon">Telefon</option>
+    <option value="Diğer">Diğer</option>
+</select>
+
+<br>
+
+<select id="isTipi">
+    <option value="YURT İÇİ">YURT İÇİ</option>
+    <option value="YURT DIŞI">YURT DIŞI</option>
+</select>
+
+<input id="maliyet" type="number" placeholder="Maliyet KDV Dahil">
+<input id="satis" type="number" placeholder="Satış KDV Dahil">
+
+<select id="para" onchange="kurGetir()">
+    <option value="TL">TL</option>
+    <option value="EUR">EURO</option>
+    <option value="USD">DOLAR</option>
+</select>
+
+<input id="kur" type="number" placeholder="Kur" value="1">
+
+<br>
+
+<select id="odemeYontemi" onchange="odemeYontemiDegisti()">
+    <option value="Havale">Havale</option>
+    <option value="Kredi Kartı">Kredi Kartı</option>
+    <option value="Sanal Kart">Sanal Kart</option>
+    <option value="Nakit">Nakit</option>
+    <option value="Cari">Cari / Sonradan Ödeme</option>
+</select>
+
+<select id="kartSec" style="display:none"></select>
+
+<br>
+
+<select id="otelFatura">
+    <option value="Bekliyor">Otel Faturası Bekliyor</option>
+    <option value="Geldi">Otel Faturası Geldi</option>
+    <option value="Gerek Yok">Otel Faturası Gerek Yok</option>
+</select>
+
+<select id="musteriFatura">
+    <option value="Kesilmedi">Müşteri Faturası Kesilmedi</option>
+    <option value="Kesildi">Müşteri Faturası Kesildi</option>
+</select>
+
+<select id="odeme">
+    <option value="Bekliyor">Ödeme Bekliyor</option>
+    <option value="Alındı">Ödeme Alındı</option>
+    <option value="Kısmi">Kısmi Ödeme</option>
+</select>
+
+<br>
+
+<label>Fatura PDF / Görsel:</label>
+<input id="faturaDosya" type="file" accept=".pdf,image/*">
+
+<br>
+
+<textarea id="ekstralar" placeholder="Ekstralar"></textarea>
+<br>
+<textarea id="notlar" placeholder="Notlar"></textarea>
+
+<br>
+<button id="anaButon" onclick="ekle()">İşi Ekle</button>
+<button onclick="formTemizle()">Formu Temizle</button>
+</div>
+
+<h3>Arama / Filtre</h3>
+
+<div class="form">
+    <input id="arama" placeholder="Firma, otel, misafir, not ara..." oninput="listele()">
+
+    <select id="filtreOtelFatura" onchange="listele()">
+        <option value="">Otel Faturası: Tümü</option>
+        <option value="Bekliyor">Bekliyor</option>
+        <option value="Geldi">Geldi</option>
+        <option value="Gerek Yok">Gerek Yok</option>
+    </select>
+
+    <select id="filtreMusteriFatura" onchange="listele()">
+        <option value="">Müşteri Faturası: Tümü</option>
+        <option value="Kesilmedi">Kesilmedi</option>
+        <option value="Kesildi">Kesildi</option>
+    </select>
+
+    <select id="filtreOdeme" onchange="listele()">
+        <option value="">Ödeme: Tümü</option>
+        <option value="Bekliyor">Bekliyor</option>
+        <option value="Alındı">Alındı</option>
+        <option value="Kısmi">Kısmi</option>
+    </select>
+
+    <select id="filtreIsTipi" onchange="listele()">
+        <option value="">İş Tipi: Tümü</option>
+        <option value="YURT İÇİ">YURT İÇİ</option>
+        <option value="YURT DIŞI">YURT DIŞI</option>
+    </select>
+
+    <select id="filtreOdemeYontemi" onchange="listele()">
+        <option value="">Ödeme Yöntemi: Tümü</option>
+        <option value="Havale">Havale</option>
+        <option value="Kredi Kartı">Kredi Kartı</option>
+        <option value="Sanal Kart">Sanal Kart</option>
+        <option value="Nakit">Nakit</option>
+        <option value="Cari">Cari / Sonradan Ödeme</option>
+    </select>
+
+    <button onclick="filtreTemizle()">Filtreleri Temizle</button>
+</div>
+
+<h3>İşler</h3>
+<div id="liste"></div>
+
+<script>
+let veriler = JSON.parse(localStorage.getItem("otelVeri")) || [];
+let kartlar = JSON.parse(localStorage.getItem("kartlar")) || [];
+let duzenlemeIndex = null;
+
+function kaydet(){
+    localStorage.setItem("otelVeri", JSON.stringify(veriler));
+    localStorage.setItem("kartlar", JSON.stringify(kartlar));
+}
+
+function formatPara(tutar, para){
+    let sembol = para === "TL" ? "TL" : para === "EUR" ? "€" : "$";
+    return (Number(tutar)||0).toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}) + " " + sembol;
+}
+
+function formatTL(tutar){
+    return (Number(tutar)||0).toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}) + " TL";
+}
+
+function kdvHesapla(tutar, isTipi){
+    let oran = isTipi === "YURT DIŞI" ? 0 : 0.12;
+    let dahil = Number(tutar) || 0;
+    let haric = dahil / (1 + oran);
+    let kdv = dahil - haric;
+    return {oran,dahil,haric,kdv};
+}
+
+function gecelemeHesapla(checkin, checkout){
+    if(!checkin || !checkout) return 0;
+    let gun = (new Date(checkout) - new Date(checkin)) / (1000*60*60*24);
+    return gun > 0 ? gun : 0;
+}
+
+async function kurGetir(){
+    let para = document.getElementById("para").value;
+    let kurInput = document.getElementById("kur");
+
+    if(para === "TL"){
+        kurInput.value = 1;
+        return;
+    }
+
+    try{
+        let response = await fetch(`https://open.er-api.com/v6/latest/${para}`);
+        let data = await response.json();
+        if(data && data.rates && data.rates.TRY){
+            kurInput.value = data.rates.TRY.toFixed(4);
+        }
+    }catch(e){
+        alert("Kur çekilemedi kanka. Elle yazabilirsin.");
+    }
+}
+
+function kartEkle(){
+    let ad = document.getElementById("kartAdi").value.trim();
+    let son4 = document.getElementById("kartSon4").value.trim();
+
+    if(!ad || son4.length !== 4 || isNaN(son4)){
+        alert("Kart adı ve 4 haneli son numara gir kanka.");
+        return;
+    }
+
+    kartlar.push({
+        id: Date.now(),
+        ad: ad,
+        son4: son4
+    });
+
+    document.getElementById("kartAdi").value = "";
+    document.getElementById("kartSon4").value = "";
+
+    kaydet();
+    kartlariListele();
+    kartSelectDoldur();
+}
+
+function kartSil(id){
+    if(confirm("Bu kartı silmek istiyor musun?")){
+        kartlar = kartlar.filter(k => k.id !== id);
+        kaydet();
+        kartlariListele();
+        kartSelectDoldur();
+    }
+}
+
+function kartlariListele(){
+    let alan = document.getElementById("kartListesi");
+    alan.innerHTML = "";
+
+    if(kartlar.length === 0){
+        alan.innerHTML = `<p class="small">Henüz kart tanımlanmadı.</p>`;
+        return;
+    }
+
+    kartlar.forEach(kart=>{
+        alan.innerHTML += `
+            <div class="small">
+                <b>${kart.ad}</b> - Son 4: ${kart.son4}
+                <button class="btn-delete" onclick="kartSil(${kart.id})">Sil</button>
+            </div>
+        `;
+    });
+}
+
+function kartSelectDoldur(){
+    let select = document.getElementById("kartSec");
+    select.innerHTML = "";
+
+    kartlar.forEach(kart=>{
+        let option = document.createElement("option");
+        option.value = kart.id;
+        option.textContent = `${kart.ad} - ${kart.son4}`;
+        select.appendChild(option);
+    });
+}
+
+function odemeYontemiDegisti(){
+    let yontem = document.getElementById("odemeYontemi").value;
+    let kartSec = document.getElementById("kartSec");
+
+    if(yontem === "Kredi Kartı" || yontem === "Sanal Kart"){
+        kartSec.style.display = "inline-block";
+    } else {
+        kartSec.style.display = "none";
+    }
+}
+
+function seciliKartText(id){
+    let kart = kartlar.find(k => String(k.id) === String(id));
+    return kart ? `${kart.ad} - Son 4: ${kart.son4}` : "-";
+}
+
+function dashboardGuncelle(){
+
+    let toplamIs = veriler.length;
+    let toplamMaliyet = 0;
+    let toplamSatis = 0;
+    let toplamKar = 0;
+    let bekleyenFatura = 0;
+    let kesilmeyenFatura = 0;
+    let odemeBekleyen = 0;
+
+    veriler.forEach(item => {
+
+        let kur = Number(item.kur) || 1;
+        let maliyet = Number(item.maliyet) || 0;
+        let satis = Number(item.satis) || 0;
+
+        toplamMaliyet += maliyet * kur;
+        toplamSatis += satis * kur;
+        toplamKar += (satis - maliyet) * kur;
+
+        if(item.otelFatura === "Bekliyor" || !item.otelFatura){
+            bekleyenFatura++;
+        }
+
+        if(item.musteriFatura === "Kesilmedi"){
+            kesilmeyenFatura++;
+        }
+
+        if(item.odeme === "Bekliyor"){
+            odemeBekleyen++;
+        }
+
+    });
+
+    let karOrani = toplamSatis > 0 
+        ? ((toplamKar / toplamSatis) * 100).toFixed(1)
+        : 0;
+
+    document.getElementById("toplamIs").innerText = toplamIs;
+    document.getElementById("toplamMaliyet").innerText = formatTL(toplamMaliyet);
+    document.getElementById("toplamSatis").innerText = formatTL(toplamSatis);
+    document.getElementById("toplamKar").innerText = formatTL(toplamKar);
+    document.getElementById("karOrani").innerText = karOrani + "%";
+    document.getElementById("bekleyenFatura").innerText = bekleyenFatura;
+    document.getElementById("kesilmeyenFatura").innerText = kesilmeyenFatura;
+    document.getElementById("odemeBekleyen").innerText = odemeBekleyen;
+}
+function listele(){
+        let arama = document.getElementById("arama") ? document.getElementById("arama").value.toLowerCase() : "";
+    let filtreOtelFatura = document.getElementById("filtreOtelFatura") ? document.getElementById("filtreOtelFatura").value : "";
+    let filtreMusteriFatura = document.getElementById("filtreMusteriFatura") ? document.getElementById("filtreMusteriFatura").value : "";
+    let filtreOdeme = document.getElementById("filtreOdeme") ? document.getElementById("filtreOdeme").value : "";
+    let filtreIsTipi = document.getElementById("filtreIsTipi") ? document.getElementById("filtreIsTipi").value : "";
+    let filtreOdemeYontemi = document.getElementById("filtreOdemeYontemi") ? document.getElementById("filtreOdemeYontemi").value : "";let liste = document.getElementById("liste");
+    liste.innerHTML = "";
+
+    veriler.forEach((item,index)=>{
+                let aramaMetni = `
+            ${item.firma || ""}
+            ${item.otel || ""}
+            ${item.misafirler || ""}
+            ${item.talepEden || ""}
+            ${item.ekstralar || ""}
+            ${item.notlar || ""}
+        `.toLowerCase();
+
+        if(arama && !aramaMetni.includes(arama)) return;
+        if(filtreOtelFatura && item.otelFatura !== filtreOtelFatura) return;
+        if(filtreMusteriFatura && item.musteriFatura !== filtreMusteriFatura) return;
+        if(filtreOdeme && item.odeme !== filtreOdeme) return;
+        if(filtreIsTipi && item.isTipi !== filtreIsTipi) return;
+        if(filtreOdemeYontemi && item.odemeYontemi !== filtreOdemeYontemi) return;let para = item.para || "TL";
+        let kur = Number(item.kur) || 1;
+        let maliyet = kdvHesapla(item.maliyet, item.isTipi);
+        let satis = kdvHesapla(item.satis, item.isTipi);
+        let kar = satis.dahil - maliyet.dahil;
+        let geceleme = gecelemeHesapla(item.checkin,item.checkout);
+
+        let kartBilgi = (item.odemeYontemi === "Kredi Kartı" || item.odemeYontemi === "Sanal Kart")
+            ? seciliKartText(item.kartId)
+            : "-";
+
+        let faturaHtml = item.faturaData
+            ? `<button class="btn-file" onclick="faturaAc(${index})">Faturayı Aç</button>`
+            : `<span class="small">Fatura dosyası eklenmedi</span>`;
+
+        let div = document.createElement("div");
+        div.className = "card";
+
+        div.innerHTML = `
+            <b>Firma:</b> ${item.firma || "-"}<br>
+            <b>Otel:</b> ${item.otel || "-"}<br>
+            <b>Misafirler:</b> ${item.misafirler || "-"}<br>
+            <b>Oda Sayısı:</b> ${item.oda || "-"}<br>
+            <b>Oda Tipi:</b> ${item.odaTipi || "-"}<br>
+            <b>Check-in:</b> ${item.checkin || "-"}<br>
+            <b>Check-out:</b> ${item.checkout || "-"}<br>
+            <b>Geceleme:</b> ${geceleme}<br><br>
+
+            <b>Talep Eden:</b> ${item.talepEden || "-"}<br>
+            <b>Talep Kanalı:</b> ${item.talepKanali || "-"}<br><br>
+
+            <b>İş Tipi:</b> ${item.isTipi || "YURT İÇİ"}<br>
+            <b>KDV Oranı:</b> %${maliyet.oran * 100}<br><br>
+
+            <b>Maliyet KDV Hariç:</b> ${formatPara(maliyet.haric, para)}<br>
+            <b>Maliyet KDV Tutarı:</b> ${formatPara(maliyet.kdv, para)}<br>
+            <b>Maliyet KDV Dahil:</b> ${formatPara(maliyet.dahil, para)}<br><br>
+
+            <b>Satış KDV Hariç:</b> ${formatPara(satis.haric, para)}<br>
+            <b>Satış KDV Tutarı:</b> ${formatPara(satis.kdv, para)}<br>
+            <b>Satış KDV Dahil:</b> ${formatPara(satis.dahil, para)}<br><br>
+
+            <span class="kar">Kâr: ${formatPara(kar, para)}</span><br>
+            <b>Kâr TL:</b> ${formatTL(kar * kur)}<br><br>
+
+            <b>Ödeme Yöntemi:</b> ${item.odemeYontemi || "-"}<br>
+            <b>Kart:</b> ${kartBilgi}<br>
+            <b>Ödeme Durumu:</b> ${item.odeme || "-"}<br><br>
+
+            <b>Otel Faturası:</b> ${item.otelFatura || "Bekliyor"}<br>
+            <b>Müşteri Faturası:</b> ${item.musteriFatura || "-"}<br><br>
+
+            <b>Fatura Dosyası:</b> ${item.faturaAdi || "-"}<br>
+            ${faturaHtml}<br><br>
+
+            <b>Ekstralar:</b><br><span class="small">${item.ekstralar || "-"}</span><br><br>
+            <b>Notlar:</b><br><span class="small">${item.notlar || "-"}</span><br><br>
+
+            <button class="btn-edit" onclick="duzenle(${index})">Düzenle</button>
+            <button class="btn-delete" onclick="sil(${index})">Sil</button>
+        `;
+
+        liste.appendChild(div);
+    });
+
+    dashboardGuncelle();
+}
+
+function dosyaOku(){
+    return new Promise(resolve=>{
+        let dosya = document.getElementById("faturaDosya").files[0];
+        if(!dosya){
+            resolve({data:null, ad:null});
+            return;
+        }
+
+        let reader = new FileReader();
+        reader.onload = e => resolve({data:e.target.result, ad:dosya.name});
+        reader.readAsDataURL(dosya);
+    });
+}
+
+async function ekle(){
+    let dosya = await dosyaOku();
+
+    let veri = {
+        firma: document.getElementById("firma").value,
+        otel: document.getElementById("otel").value,
+        oda: document.getElementById("oda").value,
+        odaTipi: document.getElementById("odaTipi").value,
+        checkin: document.getElementById("checkin").value,
+        checkout: document.getElementById("checkout").value,
+        misafirler: document.getElementById("misafirler").value,
+        talepEden: document.getElementById("talepEden").value,
+        talepKanali: document.getElementById("talepKanali").value,
+        isTipi: document.getElementById("isTipi").value,
+        maliyet: document.getElementById("maliyet").value,
+        satis: document.getElementById("satis").value,
+        para: document.getElementById("para").value,
+        kur: document.getElementById("kur").value,
+        odemeYontemi: document.getElementById("odemeYontemi").value,
+        kartId: document.getElementById("kartSec").value,
+        otelFatura: document.getElementById("otelFatura").value,
+        musteriFatura: document.getElementById("musteriFatura").value,
+        odeme: document.getElementById("odeme").value,
+        ekstralar: document.getElementById("ekstralar").value,
+        notlar: document.getElementById("notlar").value,
+        faturaData: dosya.data,
+        faturaAdi: dosya.ad
+    };
+
+    if((veri.odemeYontemi === "Kredi Kartı" || veri.odemeYontemi === "Sanal Kart") && !veri.kartId){
+        alert("Kartlı ödeme seçtin kanka, kart seçmen lazım.");
+        return;
+    }
+
+    if(duzenlemeIndex !== null){
+        if(!dosya.data){
+            veri.faturaData = veriler[duzenlemeIndex].faturaData || null;
+            veri.faturaAdi = veriler[duzenlemeIndex].faturaAdi || null;
+        }
+        veriler[duzenlemeIndex] = veri;
+        duzenlemeIndex = null;
+    } else {
+        veriler.push(veri);
+    }
+
+    kaydet();
+    listele();
+    formTemizle();
+}
+
+function duzenle(index){
+    let item = veriler[index];
+    duzenlemeIndex = index;
+
+    document.getElementById("firma").value = item.firma || "";
+    document.getElementById("otel").value = item.otel || "";
+    document.getElementById("oda").value = item.oda || "";
+    document.getElementById("odaTipi").value = item.odaTipi || "";
+    document.getElementById("checkin").value = item.checkin || "";
+    document.getElementById("checkout").value = item.checkout || "";
+    document.getElementById("misafirler").value = item.misafirler || "";
+    document.getElementById("talepEden").value = item.talepEden || "";
+    document.getElementById("talepKanali").value = item.talepKanali || "WhatsApp";
+    document.getElementById("isTipi").value = item.isTipi || "YURT İÇİ";
+    document.getElementById("maliyet").value = item.maliyet || "";
+    document.getElementById("satis").value = item.satis || "";
+    document.getElementById("para").value = item.para || "TL";
+    document.getElementById("kur").value = item.kur || 1;
+    document.getElementById("odemeYontemi").value = item.odemeYontemi || "Havale";
+    document.getElementById("kartSec").value = item.kartId || "";
+    odemeYontemiDegisti();
+    document.getElementById("otelFatura").value = item.otelFatura || "Bekliyor";
+    document.getElementById("musteriFatura").value = item.musteriFatura || "Kesilmedi";
+    document.getElementById("odeme").value = item.odeme || "Bekliyor";
+    document.getElementById("ekstralar").value = item.ekstralar || "";
+    document.getElementById("notlar").value = item.notlar || "";
+
+    document.getElementById("anaButon").innerText = "Güncelle";
+    document.getElementById("formBaslik").innerText = "İşi Düzenle";
+    window.scrollTo(0,0);
+}
+
+function sil(index){
+    if(confirm("Bu işi silmek istiyor musun?")){
+        veriler.splice(index,1);
+        kaydet();
+        listele();
+    }
+}
+
+function faturaAc(index){
+    let item = veriler[index];
+    if(item.faturaData){
+        let win = window.open();
+        win.document.write(`<iframe src="${item.faturaData}" style="width:100%;height:100vh;border:0"></iframe>`);
+    }
+}
+function filtreTemizle(){
+    document.getElementById("arama").value = "";
+    document.getElementById("filtreOtelFatura").value = "";
+    document.getElementById("filtreMusteriFatura").value = "";
+    document.getElementById("filtreOdeme").value = "";
+    document.getElementById("filtreIsTipi").value = "";
+    document.getElementById("filtreOdemeYontemi").value = "";
+    listele();
+}
+function formTemizle(){
+    document.querySelectorAll("input, textarea").forEach(el=>{
+        if(el.id !== "kur") el.value = "";
+    });
+
+    document.getElementById("talepKanali").value = "WhatsApp";
+    document.getElementById("isTipi").value = "YURT İÇİ";
+    document.getElementById("para").value = "TL";
+    document.getElementById("kur").value = 1;
+    document.getElementById("odemeYontemi").value = "Havale";
+    document.getElementById("otelFatura").value = "Bekliyor";
+    document.getElementById("musteriFatura").value = "Kesilmedi";
+    document.getElementById("odeme").value = "Bekliyor";
+    document.getElementById("anaButon").innerText = "İşi Ekle";
+    document.getElementById("formBaslik").innerText = "Yeni İş Ekle";
+
+    odemeYontemiDegisti();
+    duzenlemeIndex = null;
+}
+
+kartlariListele();
+kartSelectDoldur();
+odemeYontemiDegisti();
+listele();
+</script>
+
+</body>
+</html>
