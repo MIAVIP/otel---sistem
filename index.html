@@ -215,18 +215,39 @@ button{cursor:pointer;background:#222;color:white}
 
 </div>
 
-<script>
-let veriler = JSON.parse(localStorage.getItem("otelVeri")) || [];
-let musteriler = JSON.parse(localStorage.getItem("musteriler")) || [];
-let firmalar = JSON.parse(localStorage.getItem("firmalar")) || [];
-let secilenMusteriIds = [];
-let duzenlemeIndex = null;
+let veriler = [];
+let musteriler = [];
+let firmalar = [];
 
-function kaydet(){
-    localStorage.setItem("otelVeri", JSON.stringify(veriler));
-    localStorage.setItem("musteriler", JSON.stringify(musteriler));
-    localStorage.setItem("firmalar", JSON.stringify(firmalar));
+async function verileriYukle() {
+  let { data, error } = await db
+    .from("ortak_veri")
+    .select("*")
+    .eq("id", 1)
+    .single();
+
+  if (data) {
+    veriler = data.data.veriler || [];
+    musteriler = data.data.musteriler || [];
+    firmalar = data.data.firmalar || [];
+  } else {
+    console.error(error);
+  }
 }
+
+async function kaydet() {
+  await db
+    .from("ortak_veri")
+    .update({
+      data: {
+        veriler: veriler,
+        musteriler: musteriler,
+        firmalar: firmalar
+      }
+    })
+    .eq("id", 1);
+}
+
 
 function sekmeAc(id){
     document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));
@@ -850,7 +871,40 @@ const SUPABASE_URL = "https://mpwspnccuaqyitwghqip.supabase.co";
 const SUPABASE_KEY = "sb_publishable_lWeTQWJVlynCDmQWcdDSVQ_E0AfIJJX";
 
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let veriler = [];
+let musteriler = [];
+let firmalar = [];
 
+async function verileriYukle() {
+  let { data, error } = await db
+    .from("ortak_veri")
+    .select("*")
+    .eq("id", 1)
+    .single();
+
+  if (data) {
+    veriler = data.data.veriler || [];
+    musteriler = data.data.musteriler || [];
+    firmalar = data.data.firmalar || [];
+  } else {
+    console.error(error);
+  }
+}
+
+async function kaydet() {
+  await db
+    .from("ortak_veri")
+    .update({
+      data: {
+        veriler: veriler,
+        musteriler: musteriler,
+        firmalar: firmalar
+      }
+    })
+    .eq("id", 1);
+}
+
+verileriYukle();
 console.log("Supabase bağlandı kanka 😎");
 </script>
 </body>
