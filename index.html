@@ -126,12 +126,23 @@ button{cursor:pointer;background:#222;color:white}
   <input id="yeniKart" placeholder="Yeni kart adı / son 4 hane">
   <button type="button" onclick="kartKaydet()">Kartı Kaydet</button>
 </div>
+  <select id="odemeYontemi" onchange="kartAlaniKontrol()">
     <option value="Havale">Havale</option>
     <option value="Kredi Kartı">Kredi Kartı</option>
     <option value="Sanal Kart">Sanal Kart</option>
     <option value="Nakit">Nakit</option>
     <option value="Cari">Cari / Sonradan Ödeme</option>
 </select>
+
+<div id="kartAlani" style="display:none;">
+    <select id="kartSec">
+        <option value="">Kart seç</option>
+    </select>
+
+    <input id="yeniKart" placeholder="Yeni kart adı / son 4 hane">
+
+    <button type="button" onclick="kartKaydet()">Kartı Kaydet</button>
+</div>
 
 <select id="otelFatura">
     <option value="Bekliyor">Otel Faturası Bekliyor</option>
