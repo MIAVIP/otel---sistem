@@ -253,6 +253,8 @@ async function verileriYukle() {
     firmalar = data.data?.firmalar || [];
     kartlar = data.data?.kartlar || [];
 kartlariDoldur();
+    kartlar = data.data?.kartlar || [];
+kartlariDoldur();
   } else {
     console.error(error);
   }
@@ -262,11 +264,12 @@ async function kaydet() {
   let { error } = await db
     .from("ortak_veri")
     .update({
-      data: {
-        veriler,
-        musteriler,
-        firmalar
-      }
+     data: {
+  veriler,
+  musteriler,
+  firmalar,
+  kartlar
+}
     })
     .eq("id", 1);
 
