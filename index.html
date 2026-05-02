@@ -568,7 +568,7 @@ function kartOlustur(item,index){
     <span class="kar">Kâr: ${formatPara(kar,para)}</span><br>
     <b>Kâr TL:</b> ${formatTL(kar*kur)}<br><br>
 
-    Ödeme Yöntemi: ${item.odemeYontemi} ${item.kartBilgisi ? "(" + item.kartBilgisi + ")" : ""}
+    <b>Ödeme Yöntemi:</b> ${item.odemeYontemi || "-"} ${item.kartBilgisi ? "(" + item.kartBilgisi + ")" : ""}<br>
     <b>Otel Faturası:</b> ${item.otelFatura||"-"}<br>
     <b>Müşteri Faturası:</b> ${item.musteriFatura||"-"}<br>
     <b>Ödeme:</b> ${item.odeme||"-"}<br><br>
