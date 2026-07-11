@@ -92,13 +92,15 @@ function bindEvents() {
     if (value("currency") === "TL") $("exchangeRate").value = "1";
     else await fetchRate(value("currency"));
   });
-  ["filterHotelInvoice","filterCustomerInvoice","filterPayment"].forEach(id => $(id).addEventListener("change", () => {state.currentPage=0; loadJobs();}));
+  ["filterCompanyId","filterJobType","filterDateFrom","filterDateTo","filterCurrency","filterPaymentMethod","filterHotelInvoice","filterCustomerInvoice","filterPayment","filterSort"]
+    .forEach(id => $(id).addEventListener("change", () => {state.currentPage=0; loadJobs();}));
   $("searchInput").addEventListener("input", () => {
     clearTimeout(state.searchTimer);
     state.searchTimer = setTimeout(() => {state.currentPage=0; loadJobs();}, 350);
   });
   $("migrateDocumentsButton").addEventListener("click", migrateLegacyDocuments);
   $("downloadBackupButton").addEventListener("click", downloadFullBackup);
+  $("clearJobFiltersButton").addEventListener("click", clearJobFilters);
 }
 
 async function login(event) {
@@ -139,6 +141,7 @@ async function loadLookups() {
   state.customers = customers.data || [];
   state.cards = cards.data || [];
   fillSelect($("companyId"), state.companies, "Firma seç");
+  fillSelect($("filterCompanyId"), state.companies, "Tüm firmalar");
   fillSelect($("customerIds"), state.customers, null);
   fillSelect($("paymentCardId"), state.cards, "Kart seç");
   renderSelectedCustomers();
@@ -213,10 +216,13 @@ async function loadDashboard() {
   $("recentJobs").innerHTML = jobs.items.length ? jobs.items.map(jobCard).join("") : empty("Henüz iş kaydı bulunmuyor.");
 }
 
-async function fetchJobs({search="", hotelInvoice="", customerInvoice="", payment="", includeDeleted=false, onlyDeleted=false, limit=PAGE_SIZE, offset=0}={}) {
-  const {data,error} = await db.rpc("search_jobs", {
+async function fetchJobs({search="", hotelInvoice="", customerInvoice="", payment="", companyId="", jobType="", dateFrom="", dateTo="", currency="", paymentMethod="", sort="created_desc", includeDeleted=false, onlyDeleted=false, limit=PAGE_SIZE, offset=0}={}) {
+  const {data,error} = await db.rpc("search_jobs_v2", {
     p_search:search, p_hotel_invoice_status:hotelInvoice, p_customer_invoice_status:customerInvoice,
-    p_payment_status:payment, p_include_deleted:includeDeleted, p_only_deleted:onlyDeleted, p_limit:limit, p_offset:offset
+    p_payment_status:payment, p_company_id:companyId||null, p_job_type:jobType,
+    p_date_from:dateFrom||null, p_date_to:dateTo||null, p_currency:currency,
+    p_payment_method:paymentMethod, p_sort:sort, p_include_deleted:includeDeleted,
+    p_only_deleted:onlyDeleted, p_limit:limit, p_offset:offset
   });
   if (error) throw error;
   const items = (data || []).map(row => ({...row.job, company_name:row.company_name, card_name:row.card_name, customers:row.customers||[], documents:row.documents||[]}));
@@ -226,15 +232,35 @@ async function fetchJobs({search="", hotelInvoice="", customerInvoice="", paymen
 async function loadJobs() {
   $("jobsList").innerHTML = empty("Kayıtlar yükleniyor...");
   try {
-    const result = await fetchJobs({
-      search:value("searchInput"), hotelInvoice:value("filterHotelInvoice"),
-      customerInvoice:value("filterCustomerInvoice"), payment:value("filterPayment"),
-      offset:state.currentPage*PAGE_SIZE
-    });
+    const filters = getCurrentJobFilters();
+    if (filters.dateFrom && filters.dateTo && filters.dateFrom > filters.dateTo) {
+      $("jobsList").innerHTML = empty("Başlangıç tarihi bitiş tarihinden sonra olamaz.");
+      $("filterResultSummary").textContent = "Tarih aralığını düzelt";
+      return;
+    }
+    const result = await fetchJobs({...filters, offset:state.currentPage*PAGE_SIZE});
     state.jobs = result.items; state.totalJobs = result.total;
+    $("filterResultSummary").textContent = `${result.total.toLocaleString("tr-TR")} iş bulundu`;
     $("jobsList").innerHTML = result.items.length ? result.items.map(jobCard).join("") : empty("Filtreye uygun kayıt bulunamadı.");
     renderPagination();
   } catch (error) { handleError(error,"İşler yüklenemedi"); }
+}
+
+function getCurrentJobFilters() {
+  return {
+    search:value("searchInput"), companyId:value("filterCompanyId"), jobType:value("filterJobType"),
+    dateFrom:value("filterDateFrom"), dateTo:value("filterDateTo"), currency:value("filterCurrency"),
+    paymentMethod:value("filterPaymentMethod"), hotelInvoice:value("filterHotelInvoice"),
+    customerInvoice:value("filterCustomerInvoice"), payment:value("filterPayment"), sort:value("filterSort")||"created_desc"
+  };
+}
+
+function clearJobFilters() {
+  ["searchInput","filterCompanyId","filterJobType","filterDateFrom","filterDateTo","filterCurrency","filterPaymentMethod","filterHotelInvoice","filterCustomerInvoice","filterPayment"]
+    .forEach(id => $(id).value="");
+  $("filterSort").value="created_desc";
+  state.currentPage=0;
+  loadJobs();
 }
 
 function jobCard(job, options={}) {
@@ -276,10 +302,8 @@ async function exportFilteredJobs() {
   if (!window.XLSX) return toast("Excel bileşeni yüklenemedi. Sayfayı yenileyip tekrar dene.", "error");
   setBusy(button, true, "Excel hazırlanıyor...");
   try {
-    const filters = {
-      search:value("searchInput"), hotelInvoice:value("filterHotelInvoice"),
-      customerInvoice:value("filterCustomerInvoice"), payment:value("filterPayment")
-    };
+    const filters = getCurrentJobFilters();
+    if (filters.dateFrom && filters.dateTo && filters.dateFrom > filters.dateTo) return toast("Tarih aralığını düzeltmelisin.", "error");
     const first = await fetchJobs({...filters, limit:100, offset:0});
     const jobs = [...first.items];
     for (let offset=100; offset<first.total; offset+=100) {
@@ -321,7 +345,19 @@ async function exportFilteredJobs() {
     sheet["!cols"] = Object.keys(rows[0]).map(key => ({wch:Math.min(Math.max(key.length+2, 13), key.includes("Not")||key.includes("Misafir")||key.includes("Otel")?38:22)}));
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, sheet, "İşler");
-    const searchLabel = filters.search || "Tum_Isler";
+    const companyName = state.companies.find(company=>company.id===filters.companyId)?.name || "";
+    const filterSheet = XLSX.utils.aoa_to_sheet([
+      ["Uygulanan Filtre", "Değer"], ["Genel arama", filters.search||"Tümü"], ["Firma", companyName||"Tümü"],
+      ["İş tipi", filters.jobType||"Tümü"], ["Check-in başlangıç", filters.dateFrom||"Tümü"],
+      ["Check-in bitiş", filters.dateTo||"Tümü"], ["Para birimi", filters.currency||"Tümü"],
+      ["Ödeme yöntemi", filters.paymentMethod||"Tümü"], ["Otel faturası", filters.hotelInvoice||"Tümü"],
+      ["Müşteri faturası", filters.customerInvoice||"Tümü"], ["Ödeme durumu", filters.payment||"Tümü"],
+      ["Sıralama", $("filterSort").selectedOptions[0]?.textContent||"En son eklenen"],
+      ["Dışa aktarma tarihi", new Date().toLocaleString("tr-TR")], ["Toplam iş", jobs.length]
+    ]);
+    filterSheet["!cols"]=[{wch:24},{wch:42}];
+    XLSX.utils.book_append_sheet(workbook, filterSheet, "Filtreler");
+    const searchLabel = filters.search || companyName || filters.jobType || "Tum_Isler";
     const safeLabel = searchLabel.normalize("NFKD").replace(/[^a-zA-Z0-9_-]/g,"_").replace(/_+/g,"_").slice(0,45);
     XLSX.writeFile(workbook, `MIA_${safeLabel}_${new Date().toISOString().slice(0,10)}.xlsx`, {compression:true});
     toast(`${jobs.length} iş Excel olarak indirildi.`);

@@ -106,11 +106,23 @@
       <section id="page-jobs" class="page">
         <div class="page-head"><div><p class="eyebrow">TÜM KAYITLAR</p><h1>İşler</h1></div><button data-go="newJob" class="primary">+ Yeni iş</button></div>
         <div class="panel filters">
-          <input id="searchInput" placeholder="Firma, otel, müşteri, not ara...">
-          <select id="filterHotelInvoice"><option value="">Otel faturası: Tümü</option><option>Bekliyor</option><option>Geldi</option><option>Gerek Yok</option></select>
-          <select id="filterCustomerInvoice"><option value="">Müşteri faturası: Tümü</option><option>Kesilmedi</option><option>Kesildi</option></select>
-          <select id="filterPayment"><option value="">Ödeme: Tümü</option><option>Bekliyor</option><option>Alındı</option><option>Kısmi</option></select>
-          <button id="exportFilteredJobsButton" class="primary" type="button">Filtrelenenleri Excel indir</button>
+          <div class="filter-grid">
+            <label class="filter-search">Genel arama<input id="searchInput" type="search" placeholder="Firma, otel, müşteri, not ara..."></label>
+            <label>Firma<select id="filterCompanyId"><option value="">Tüm firmalar</option></select></label>
+            <label>İş tipi<select id="filterJobType"><option value="">Tümü</option><option>YURT İÇİ</option><option>YURT DIŞI</option></select></label>
+            <label>Check-in başlangıç<input id="filterDateFrom" type="date"></label>
+            <label>Check-in bitiş<input id="filterDateTo" type="date"></label>
+            <label>Para birimi<select id="filterCurrency"><option value="">Tümü</option><option>TL</option><option>EUR</option><option>USD</option></select></label>
+            <label>Ödeme yöntemi<select id="filterPaymentMethod"><option value="">Tümü</option><option>Havale</option><option>Kredi Kartı</option><option>Sanal Kart</option><option>Nakit</option><option>Cari</option></select></label>
+            <label>Otel faturası<select id="filterHotelInvoice"><option value="">Tümü</option><option>Bekliyor</option><option>Geldi</option><option>Gerek Yok</option></select></label>
+            <label>Müşteri faturası<select id="filterCustomerInvoice"><option value="">Tümü</option><option>Kesilmedi</option><option>Kesildi</option></select></label>
+            <label>Ödeme durumu<select id="filterPayment"><option value="">Tümü</option><option>Bekliyor</option><option>Alındı</option><option>Kısmi</option></select></label>
+            <label>Sıralama<select id="filterSort"><option value="created_desc">En son eklenen</option><option value="checkin_asc">Yaklaşan check-in</option><option value="checkin_desc">Check-in: yeniden eskiye</option><option value="sale_desc">En yüksek satış</option><option value="profit_desc">En yüksek kâr</option></select></label>
+          </div>
+          <div class="filter-actions">
+            <strong id="filterResultSummary">0 iş bulundu</strong>
+            <div><button id="clearJobFiltersButton" class="secondary" type="button">Filtreleri temizle</button><button id="exportFilteredJobsButton" class="primary" type="button">Filtrelenenleri Excel indir</button></div>
+          </div>
         </div>
         <div id="jobsList"></div><div id="pagination" class="pagination"></div>
       </section>
