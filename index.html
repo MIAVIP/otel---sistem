@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="styles.css">
   <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script type="module" src="/app.js"></script>
 </head>
 <body>
@@ -74,7 +75,13 @@
           <label class="span-2">Oda tipi<input id="roomType"></label>
           <label>Check-in<input id="checkIn" type="date"></label>
           <label>Check-out<input id="checkOut" type="date"></label>
-          <label class="span-2">Misafirler<select id="customerIds" multiple size="5"></select><small>Birden fazla kişi seçmek için Ctrl/⌘ kullanabilirsin.</small></label>
+          <label class="span-2 customer-picker">Misafirler
+            <input id="customerSearch" type="search" placeholder="Misafir ismiyle ara..." autocomplete="off">
+            <div id="customerSearchResults" class="customer-search-results"></div>
+            <div id="selectedCustomers" class="selected-customers"></div>
+            <select id="customerIds" class="hidden" multiple aria-hidden="true"></select>
+            <small>İsmi yazıp sonuca tıklayarak bir veya birden fazla misafir seçebilirsin.</small>
+          </label>
           <label class="inline-create span-2">Yeni müşteri<input id="newCustomerName" placeholder="Ad Soyad"><button id="addCustomerButton" type="button" class="secondary">Kaydet ve seç</button></label>
           <label>Talep eden<input id="requester"></label>
           <label>Talep kanalı<select id="requestChannel"><option>WhatsApp</option><option>Mail</option><option>Telefon</option><option>Diğer</option></select></label>
@@ -103,6 +110,7 @@
           <select id="filterHotelInvoice"><option value="">Otel faturası: Tümü</option><option>Bekliyor</option><option>Geldi</option><option>Gerek Yok</option></select>
           <select id="filterCustomerInvoice"><option value="">Müşteri faturası: Tümü</option><option>Kesilmedi</option><option>Kesildi</option></select>
           <select id="filterPayment"><option value="">Ödeme: Tümü</option><option>Bekliyor</option><option>Alındı</option><option>Kısmi</option></select>
+          <button id="exportFilteredJobsButton" class="primary" type="button">Filtrelenenleri Excel indir</button>
         </div>
         <div id="jobsList"></div><div id="pagination" class="pagination"></div>
       </section>

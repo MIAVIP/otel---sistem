@@ -18,7 +18,7 @@ const state = {
 
 const $ = id => document.getElementById(id);
 const value = id => $(id).value.trim();
-const selectedValues = id => [...$(id).selectedOptions].map(o => o.value);
+const selectedValues = id => [...$(id).options].filter(option => option.selected).map(option => option.value);
 const esc = input => String(input ?? "").replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
 const money = (amount, currency = "TL") => new Intl.NumberFormat("tr-TR", {style:"currency", currency: currency === "TL" ? "TRY" : currency, maximumFractionDigits:2}).format(Number(amount)||0);
 const moneyTry = amount => money(amount, "TL");
@@ -85,6 +85,9 @@ function bindEvents() {
   $("addCardButton").addEventListener("click", addCardFromForm);
   $("customerPageAdd").addEventListener("click", addCustomerFromPage);
   $("paymentMethod").addEventListener("change", toggleCardField);
+  $("customerSearch").addEventListener("input", renderCustomerSearchResults);
+  $("customerSearch").addEventListener("focus", renderCustomerSearchResults);
+  $("exportFilteredJobsButton").addEventListener("click", exportFilteredJobs);
   $("currency").addEventListener("change", async () => {
     if (value("currency") === "TL") $("exchangeRate").value = "1";
     else await fetchRate(value("currency"));
@@ -138,6 +141,7 @@ async function loadLookups() {
   fillSelect($("companyId"), state.companies, "Firma seç");
   fillSelect($("customerIds"), state.customers, null);
   fillSelect($("paymentCardId"), state.cards, "Kart seç");
+  renderSelectedCustomers();
 }
 
 function fillSelect(select, rows, placeholder) {
@@ -147,6 +151,49 @@ function fillSelect(select, rows, placeholder) {
   if (select.multiple) [...select.options].forEach(o => o.selected = current.includes(o.value));
   else if (rows.some(r => r.id === current)) select.value = current;
 }
+
+function renderCustomerSearchResults() {
+  const area = $("customerSearchResults");
+  const query = value("customerSearch").toLocaleLowerCase("tr-TR");
+  if (!query) {
+    area.innerHTML = '<div class="customer-hint">Misafir bulmak için yukarıya isim yaz.</div>';
+    return;
+  }
+  const selected = new Set(selectedValues("customerIds"));
+  const matches = state.customers
+    .filter(customer => customer.name.toLocaleLowerCase("tr-TR").includes(query))
+    .slice(0, 12);
+  area.innerHTML = matches.length ? matches.map(customer => `
+    <button class="customer-result-button ${selected.has(customer.id)?"selected":""}" type="button" onclick="selectCustomer('${customer.id}')">
+      <span>${esc(customer.name)}</span><small>${selected.has(customer.id)?"Seçildi":"Seç"}</small>
+    </button>`).join("") : '<div class="customer-hint">Bu isimle kayıtlı misafir bulunamadı.</div>';
+}
+
+function renderSelectedCustomers() {
+  const selected = new Set(selectedValues("customerIds"));
+  $("selectedCustomers").innerHTML = state.customers
+    .filter(customer => selected.has(customer.id))
+    .map(customer => `<span class="selected-customer">${esc(customer.name)}<button type="button" aria-label="${esc(customer.name)} seçimini kaldır" onclick="removeSelectedCustomer('${customer.id}')">×</button></span>`)
+    .join("");
+}
+
+function selectCustomer(id) {
+  const option = [...$("customerIds").options].find(item => item.value === id);
+  if (option) option.selected = true;
+  $("customerSearch").value = "";
+  renderSelectedCustomers();
+  renderCustomerSearchResults();
+  $("customerSearch").focus();
+}
+
+function removeSelectedCustomer(id) {
+  const option = [...$("customerIds").options].find(item => item.value === id);
+  if (option) option.selected = false;
+  renderSelectedCustomers();
+  renderCustomerSearchResults();
+}
+window.selectCustomer = selectCustomer;
+window.removeSelectedCustomer = removeSelectedCustomer;
 
 async function loadDashboard() {
   const [{data:stats,error}, jobs] = await Promise.all([
@@ -195,7 +242,7 @@ function jobCard(job, options={}) {
   const profit = (Number(job.sale)-Number(job.cost));
   const deleted = !!job.deleted_at;
   return `<article class="job-card">
-    <div class="job-top"><div class="job-title"><h3>${esc(job.hotel_name)}</h3><p>${esc(job.company_name)} · ${esc(names)}</p></div><strong>${money(job.sale,job.currency)}</strong></div>
+    <div class="job-top"><div class="job-title"><h3>${esc(job.hotel_name)}</h3><p>${esc(job.company_name)} · ${esc(names)}</p></div><div class="job-sale"><span>Satış</span><strong>${money(job.sale,job.currency)}</strong></div></div>
     <div class="badges">
       ${badge(`Otel Fatura: ${job.hotel_invoice_status}`,job.hotel_invoice_status!=="Bekliyor")}
       ${badge(`Müşteri Fatura: ${job.customer_invoice_status}`,job.customer_invoice_status==="Kesildi")}
@@ -205,6 +252,7 @@ function jobCard(job, options={}) {
       <div><span>Tarih</span><b>${dateTR(job.check_in)} – ${dateTR(job.check_out)}</b></div>
       <div><span>Oda</span><b>${esc(job.room_count)} · ${esc(job.room_type||"-")}</b></div>
       <div><span>Maliyet</span><b>${money(job.cost,job.currency)}</b></div>
+      <div><span>Satış</span><b>${money(job.sale,job.currency)}</b></div>
       <div><span>Kâr</span><b>${money(profit,job.currency)}</b></div>
     </div>
     <div class="job-actions">
@@ -222,6 +270,74 @@ function renderPagination() {
   $("pagination").innerHTML = pages <= 1 ? "" : `<button class="secondary" ${state.currentPage===0?"disabled":""} onclick="changePage(-1)">← Önceki</button><span>${state.currentPage+1} / ${pages}</span><button class="secondary" ${state.currentPage>=pages-1?"disabled":""} onclick="changePage(1)">Sonraki →</button>`;
 }
 window.changePage = async delta => {state.currentPage+=delta; await loadJobs(); window.scrollTo({top:0,behavior:"smooth"});};
+
+async function exportFilteredJobs() {
+  const button = $("exportFilteredJobsButton");
+  if (!window.XLSX) return toast("Excel bileşeni yüklenemedi. Sayfayı yenileyip tekrar dene.", "error");
+  setBusy(button, true, "Excel hazırlanıyor...");
+  try {
+    const filters = {
+      search:value("searchInput"), hotelInvoice:value("filterHotelInvoice"),
+      customerInvoice:value("filterCustomerInvoice"), payment:value("filterPayment")
+    };
+    const first = await fetchJobs({...filters, limit:100, offset:0});
+    const jobs = [...first.items];
+    for (let offset=100; offset<first.total; offset+=100) {
+      button.textContent = `Kayıtlar alınıyor (${Math.min(offset,first.total)}/${first.total})...`;
+      const page = await fetchJobs({...filters, limit:100, offset});
+      jobs.push(...page.items);
+    }
+    if (!jobs.length) return toast("Excel'e aktarılacak iş bulunamadı.", "error");
+
+    const rows = jobs.map(job => {
+      const rate = job.job_type === "YURT DIŞI" ? 0 : 0.12;
+      const cost = Number(job.cost)||0, sale = Number(job.sale)||0, exchange = Number(job.exchange_rate)||1;
+      const costNet = cost/(1+rate), saleNet = sale/(1+rate);
+      const profit = sale-cost, profitNet = saleNet-costNet;
+      const nights = calculateNights(job.check_in, job.check_out);
+      return {
+        "Firma":job.company_name||"", "Otel":job.hotel_name||"",
+        "Misafirler":(job.customers||[]).map(customer=>customer.name).join(", "),
+        "Oda Sayısı":Number(job.room_count)||0, "Oda Tipi":job.room_type||"",
+        "Check-in":job.check_in||"", "Check-out":job.check_out||"", "Geceleme":nights,
+        "Oda Gece":nights*(Number(job.room_count)||0), "Talep Eden":job.requester||"",
+        "Talep Kanalı":job.request_channel||"", "İş Tipi":job.job_type||"",
+        "Para Birimi":job.currency||"TL", "Kur":exchange, "KDV Oranı (%)":rate*100,
+        "Maliyet KDV Hariç":round2(costNet), "Maliyet KDV":round2(cost-costNet),
+        "Maliyet KDV Dahil":cost, "Satış KDV Hariç":round2(saleNet),
+        "Satış KDV":round2(sale-saleNet), "Satış KDV Dahil":sale,
+        "Kâr KDV Hariç":round2(profitNet), "Kâr KDV Dahil":round2(profit),
+        "Kâr Yüzdesi (%)":costNet ? round2((profitNet/costNet)*100) : 0,
+        "Maliyet TL":round2(cost*exchange), "Satış TL":round2(sale*exchange),
+        "Kâr TL":round2(profit*exchange), "Ödeme Yöntemi":job.payment_method||"",
+        "Kart":job.card_name||"", "Otel Faturası":job.hotel_invoice_status||"",
+        "Müşteri Faturası":job.customer_invoice_status||"", "Ödeme":job.payment_status||"",
+        "Fatura Sayısı":(job.documents||[]).length, "Ekstralar":job.extras||"",
+        "Notlar":job.notes||"", "Kayıt ID":job.id
+      };
+    });
+    const sheet = XLSX.utils.json_to_sheet(rows);
+    sheet["!autofilter"] = {ref:sheet["!ref"]};
+    sheet["!cols"] = Object.keys(rows[0]).map(key => ({wch:Math.min(Math.max(key.length+2, 13), key.includes("Not")||key.includes("Misafir")||key.includes("Otel")?38:22)}));
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, "İşler");
+    const searchLabel = filters.search || "Tum_Isler";
+    const safeLabel = searchLabel.normalize("NFKD").replace(/[^a-zA-Z0-9_-]/g,"_").replace(/_+/g,"_").slice(0,45);
+    XLSX.writeFile(workbook, `MIA_${safeLabel}_${new Date().toISOString().slice(0,10)}.xlsx`, {compression:true});
+    toast(`${jobs.length} iş Excel olarak indirildi.`);
+  } catch (error) {
+    handleError(error, "Excel oluşturulamadı");
+  } finally {
+    setBusy(button, false);
+  }
+}
+
+function calculateNights(checkIn, checkOut) {
+  if (!checkIn || !checkOut) return 0;
+  const difference = (new Date(`${checkOut}T00:00:00`) - new Date(`${checkIn}T00:00:00`))/86400000;
+  return Math.max(Number.isFinite(difference)?difference:0, 0);
+}
+function round2(number) { return Math.round((Number(number)+Number.EPSILON)*100)/100; }
 
 async function saveJob(event) {
   event.preventDefault();
@@ -283,12 +399,14 @@ function fillJobForm(job) {
   const map={jobId:job.id,jobVersion:job.version,companyId:job.company_id,hotelName:job.hotel_name,roomCount:job.room_count,roomType:job.room_type||"",checkIn:job.check_in||"",checkOut:job.check_out||"",requester:job.requester||"",requestChannel:job.request_channel,jobType:job.job_type,cost:job.cost,sale:job.sale,currency:job.currency,exchangeRate:job.exchange_rate,paymentMethod:job.payment_method,paymentCardId:job.payment_card_id||"",hotelInvoiceStatus:job.hotel_invoice_status,customerInvoiceStatus:job.customer_invoice_status,paymentStatus:job.payment_status,extras:job.extras||"",notes:job.notes||""};
   Object.entries(map).forEach(([id,val])=>$(id).value=val);
   const customerIds=(job.customers||[]).map(c=>c.id); [...$("customerIds").options].forEach(o=>o.selected=customerIds.includes(o.value));
+  $("customerSearch").value=""; renderSelectedCustomers(); renderCustomerSearchResults();
   $("existingDocuments").innerHTML=(job.documents||[]).map(d=>`<div class="document-item"><span>${esc(d.original_name)}</span><button type="button" class="secondary" onclick="openDocument('${d.id}')">Aç</button></div>`).join("");
   toggleCardField();
 }
 
 function resetJobForm(go=true) {
   $("jobForm").reset(); $("jobId").value=""; $("jobVersion").value=""; $("roomCount").value="1"; $("exchangeRate").value="1"; $("cost").value="0"; $("sale").value="0";
+  [...$("customerIds").options].forEach(o=>o.selected=false); $("customerSearch").value=""; renderSelectedCustomers(); renderCustomerSearchResults();
   $("jobFormTitle").textContent="Yeni İş"; $("saveJobButton").textContent="İşi kaydet"; $("cancelEditButton").classList.add("hidden"); $("existingDocuments").innerHTML=""; toggleCardField();
   if(go) navigate("jobs");
 }
@@ -323,7 +441,7 @@ async function addCompanyFromForm() {
 async function addCustomer(name) {
   const {data,error}=await db.from("customers").insert({name}).select("id,name").single();if(error)throw error;state.customers.push(data);state.customers.sort((a,b)=>a.name.localeCompare(b.name,"tr"));fillSelect($("customerIds"),state.customers,null);return data;
 }
-async function addCustomerFromForm(){const name=value("newCustomerName");if(!name)return toast("Müşteri adını yaz.","error");try{const data=await addCustomer(name);[...$("customerIds").options].find(o=>o.value===data.id).selected=true;$("newCustomerName").value="";toast("Müşteri eklendi ve seçildi.");}catch(e){handleError(e,"Müşteri eklenemedi");}}
+async function addCustomerFromForm(){const name=value("newCustomerName");if(!name)return toast("Müşteri adını yaz.","error");try{const data=await addCustomer(name);selectCustomer(data.id);$("newCustomerName").value="";toast("Müşteri eklendi ve seçildi.");}catch(e){handleError(e,"Müşteri eklenemedi");}}
 async function addCustomerFromPage(){const name=value("customerPageName");if(!name)return toast("Müşteri adını yaz.","error");try{await addCustomer(name);$("customerPageName").value="";renderCustomers();toast("Müşteri eklendi.");}catch(e){handleError(e,"Müşteri eklenemedi");}}
 async function addCardFromForm(){const name=value("newCardName");if(!name)return toast("Kart adını veya son 4 haneyi yaz.","error");const {data,error}=await db.from("payment_cards").insert({name}).select("id,name").single();if(error)return handleError(error,"Kart eklenemedi");state.cards.push(data);state.cards.sort((a,b)=>a.name.localeCompare(b.name,"tr"));fillSelect($("paymentCardId"),state.cards,"Kart seç");$("paymentCardId").value=data.id;$("newCardName").value="";toast("Kart eklendi.");}
 function renderCustomers(){$("customersList").innerHTML=state.customers.length?state.customers.map(c=>`<div class="list-row"><b>${esc(c.name)}</b><span class="muted">Aktif</span></div>`).join(""):empty("Müşteri yok.");}
