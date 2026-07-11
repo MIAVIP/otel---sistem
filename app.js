@@ -7,6 +7,7 @@ const state = {
   user: null,
   companies: [],
   customers: [],
+  customerCompanies: [],
   cards: [],
   jobs: [],
   currentPage: 0,
@@ -87,6 +88,10 @@ function bindEvents() {
   $("paymentMethod").addEventListener("change", toggleCardField);
   $("customerSearch").addEventListener("input", renderCustomerSearchResults);
   $("customerSearch").addEventListener("focus", renderCustomerSearchResults);
+  $("customerCompanyOnly").addEventListener("change", renderCustomerSearchResults);
+  $("companyId").addEventListener("change", renderCustomerSearchResults);
+  $("customerListSearch").addEventListener("input", renderCustomers);
+  $("customerListCompanyFilter").addEventListener("change", renderCustomers);
   $("exportFilteredJobsButton").addEventListener("click", exportFilteredJobs);
   $("currency").addEventListener("change", async () => {
     if (value("currency") === "TL") $("exchangeRate").value = "1";
@@ -131,19 +136,23 @@ async function navigate(page) {
 }
 
 async function loadLookups() {
-  const [companies, customers, cards] = await Promise.all([
+  const [companies, customers, cards, customerCompanies] = await Promise.all([
     db.from("companies").select("id,name").is("deleted_at",null).order("name"),
     db.from("customers").select("id,name").is("deleted_at",null).order("name"),
-    db.from("payment_cards").select("id,name").is("deleted_at",null).order("name")
+    db.from("payment_cards").select("id,name").is("deleted_at",null).order("name"),
+    db.from("customer_companies").select("customer_id,company_id")
   ]);
-  [companies, customers, cards].forEach(r => {if (r.error) throw r.error;});
+  [companies, customers, cards, customerCompanies].forEach(r => {if (r.error) throw r.error;});
   state.companies = companies.data || [];
   state.customers = customers.data || [];
   state.cards = cards.data || [];
+  state.customerCompanies = customerCompanies.data || [];
   fillSelect($("companyId"), state.companies, "Firma seç");
   fillSelect($("filterCompanyId"), state.companies, "Tüm firmalar");
+  fillSelect($("customerListCompanyFilter"), state.companies, "Tüm firmalar");
   fillSelect($("customerIds"), state.customers, null);
   fillSelect($("paymentCardId"), state.cards, "Kart seç");
+  renderCustomerPageCompanyChecks();
   renderSelectedCustomers();
 }
 
@@ -155,6 +164,20 @@ function fillSelect(select, rows, placeholder) {
   else if (rows.some(r => r.id === current)) select.value = current;
 }
 
+function getCustomerCompanyIds(customerId) {
+  return state.customerCompanies.filter(link=>link.customer_id===customerId).map(link=>link.company_id);
+}
+
+function getCustomerCompanyNames(customerId) {
+  const ids = new Set(getCustomerCompanyIds(customerId));
+  return state.companies.filter(company=>ids.has(company.id)).map(company=>company.name);
+}
+
+function renderCustomerPageCompanyChecks() {
+  $("customerPageCompanyChecks").innerHTML = state.companies.map(company => `
+    <label class="company-check"><input type="checkbox" value="${company.id}"> ${esc(company.name)}</label>`).join("");
+}
+
 function renderCustomerSearchResults() {
   const area = $("customerSearchResults");
   const query = value("customerSearch").toLocaleLowerCase("tr-TR");
@@ -163,13 +186,22 @@ function renderCustomerSearchResults() {
     return;
   }
   const selected = new Set(selectedValues("customerIds"));
+  const selectedCompanyId = value("companyId");
+  const companyOnly = $("customerCompanyOnly").checked && !!selectedCompanyId;
   const matches = state.customers
     .filter(customer => customer.name.toLocaleLowerCase("tr-TR").includes(query))
+    .filter(customer => !companyOnly || getCustomerCompanyIds(customer.id).includes(selectedCompanyId))
+    .sort((a,b) => {
+      const aMatch=getCustomerCompanyIds(a.id).includes(selectedCompanyId)?1:0;
+      const bMatch=getCustomerCompanyIds(b.id).includes(selectedCompanyId)?1:0;
+      return bMatch-aMatch || a.name.localeCompare(b.name,"tr");
+    })
     .slice(0, 12);
   area.innerHTML = matches.length ? matches.map(customer => `
     <button class="customer-result-button ${selected.has(customer.id)?"selected":""}" type="button" onclick="selectCustomer('${customer.id}')">
-      <span>${esc(customer.name)}</span><small>${selected.has(customer.id)?"Seçildi":"Seç"}</small>
-    </button>`).join("") : '<div class="customer-hint">Bu isimle kayıtlı misafir bulunamadı.</div>';
+      <span><strong>${esc(customer.name)}</strong><small>${esc(getCustomerCompanyNames(customer.id).join(", ")||"Firma atanmamış")}</small></span>
+      <small>${selected.has(customer.id)?"Seçildi":"Seç"}</small>
+    </button>`).join("") : `<div class="customer-hint">${companyOnly?"Seçili firmada bu isimle müşteri bulunamadı. Tüm müşterileri görmek için kutunun işaretini kaldırabilirsin.":"Bu isimle kayıtlı misafir bulunamadı."}</div>`;
 }
 
 function renderSelectedCustomers() {
@@ -389,10 +421,15 @@ async function saveJob(event) {
       payment_card_id:value("paymentCardId"), hotel_invoice_status:value("hotelInvoiceStatus"),
       customer_invoice_status:value("customerInvoiceStatus"), payment_status:value("paymentStatus"), extras:value("extras"), notes:value("notes")
     };
+    const customerIds=selectedValues("customerIds");
     const {data:saved,error} = await db.rpc("save_job", {
-      p_job_id:value("jobId")||null, p_expected_version:Number(value("jobVersion")||0), p_job:payload, p_customer_ids:selectedValues("customerIds")
+      p_job_id:value("jobId")||null, p_expected_version:Number(value("jobVersion")||0), p_job:payload, p_customer_ids:customerIds
     });
     if (error) throw error;
+    customerIds.forEach(customerId=>{
+      if(!state.customerCompanies.some(link=>link.customer_id===customerId&&link.company_id===payload.company_id))
+        state.customerCompanies.push({customer_id:customerId,company_id:payload.company_id});
+    });
     const files = [...$("invoiceFiles").files];
     for (let i=0;i<files.length;i++) {
       button.textContent = `Fatura yükleniyor (${i+1}/${files.length})...`;
@@ -472,15 +509,83 @@ window.openDocument = async id => {
 async function addCompanyFromForm() {
   const name=value("newCompanyName"); if(!name)return toast("Firma adını yaz.","error");
   const {data,error}=await db.from("companies").insert({name}).select("id,name").single();
-  if(error)return handleError(error,"Firma eklenemedi"); state.companies.push(data);state.companies.sort((a,b)=>a.name.localeCompare(b.name,"tr"));fillSelect($("companyId"),state.companies,"Firma seç");$("companyId").value=data.id;$("newCompanyName").value="";toast("Firma eklendi.");
+  if(error)return handleError(error,"Firma eklenemedi");
+  state.companies.push(data); state.companies.sort((a,b)=>a.name.localeCompare(b.name,"tr"));
+  fillSelect($("companyId"),state.companies,"Firma seç"); fillSelect($("filterCompanyId"),state.companies,"Tüm firmalar");
+  fillSelect($("customerListCompanyFilter"),state.companies,"Tüm firmalar"); renderCustomerPageCompanyChecks();
+  $("companyId").value=data.id; $("newCompanyName").value=""; toast("Firma eklendi.");
 }
-async function addCustomer(name) {
-  const {data,error}=await db.from("customers").insert({name}).select("id,name").single();if(error)throw error;state.customers.push(data);state.customers.sort((a,b)=>a.name.localeCompare(b.name,"tr"));fillSelect($("customerIds"),state.customers,null);return data;
+async function addCustomer(name, companyIds=[]) {
+  const {data,error}=await db.from("customers").insert({name}).select("id,name").single();
+  if(error)throw error;
+  if(companyIds.length){
+    const links=companyIds.map(companyId=>({customer_id:data.id,company_id:companyId,created_by:state.user.id}));
+    const {error:linkError}=await db.from("customer_companies").insert(links);
+    if(linkError){await db.from("customers").delete().eq("id",data.id);throw linkError;}
+    state.customerCompanies.push(...links.map(({customer_id,company_id})=>({customer_id,company_id})));
+  }
+  state.customers.push(data); state.customers.sort((a,b)=>a.name.localeCompare(b.name,"tr"));
+  fillSelect($("customerIds"),state.customers,null); return data;
 }
-async function addCustomerFromForm(){const name=value("newCustomerName");if(!name)return toast("Müşteri adını yaz.","error");try{const data=await addCustomer(name);selectCustomer(data.id);$("newCustomerName").value="";toast("Müşteri eklendi ve seçildi.");}catch(e){handleError(e,"Müşteri eklenemedi");}}
-async function addCustomerFromPage(){const name=value("customerPageName");if(!name)return toast("Müşteri adını yaz.","error");try{await addCustomer(name);$("customerPageName").value="";renderCustomers();toast("Müşteri eklendi.");}catch(e){handleError(e,"Müşteri eklenemedi");}}
+async function addCustomerFromForm(){
+  const name=value("newCustomerName"), companyId=value("companyId");
+  if(!name)return toast("Müşteri adını yaz.","error");
+  if(!companyId)return toast("Yeni müşteriyi bağlamak için önce işin firmasını seç.","error");
+  try{const data=await addCustomer(name,[companyId]);selectCustomer(data.id);$("newCustomerName").value="";toast("Müşteri firmaya bağlandı ve seçildi.");}catch(e){handleError(e,"Müşteri eklenemedi");}
+}
+async function addCustomerFromPage(){
+  const name=value("customerPageName");
+  const companyIds=[...document.querySelectorAll("#customerPageCompanyChecks input:checked")].map(input=>input.value);
+  if(!name)return toast("Müşteri adını yaz.","error");
+  if(!companyIds.length)return toast("En az bir firma seç.","error");
+  try{await addCustomer(name,companyIds);$("customerPageName").value="";document.querySelectorAll("#customerPageCompanyChecks input").forEach(input=>input.checked=false);renderCustomers();toast("Müşteri seçili firmalara eklendi.");}catch(e){handleError(e,"Müşteri eklenemedi");}
+}
 async function addCardFromForm(){const name=value("newCardName");if(!name)return toast("Kart adını veya son 4 haneyi yaz.","error");const {data,error}=await db.from("payment_cards").insert({name}).select("id,name").single();if(error)return handleError(error,"Kart eklenemedi");state.cards.push(data);state.cards.sort((a,b)=>a.name.localeCompare(b.name,"tr"));fillSelect($("paymentCardId"),state.cards,"Kart seç");$("paymentCardId").value=data.id;$("newCardName").value="";toast("Kart eklendi.");}
-function renderCustomers(){$("customersList").innerHTML=state.customers.length?state.customers.map(c=>`<div class="list-row"><b>${esc(c.name)}</b><span class="muted">Aktif</span></div>`).join(""):empty("Müşteri yok.");}
+
+function renderCustomers(){
+  const query=value("customerListSearch").toLocaleLowerCase("tr-TR"), companyFilter=value("customerListCompanyFilter");
+  const filtered=state.customers.filter(customer=>customer.name.toLocaleLowerCase("tr-TR").includes(query))
+    .filter(customer=>!companyFilter||getCustomerCompanyIds(customer.id).includes(companyFilter));
+  $("customerListSummary").textContent=`${filtered.length.toLocaleString("tr-TR")} müşteri`;
+  const groups=[];
+  const companies=companyFilter?state.companies.filter(company=>company.id===companyFilter):state.companies;
+  companies.forEach(company=>{
+    const customers=filtered.filter(customer=>getCustomerCompanyIds(customer.id).includes(company.id));
+    if(customers.length)groups.push(renderCustomerGroup(company.name,customers));
+  });
+  if(!companyFilter){
+    const unassigned=filtered.filter(customer=>getCustomerCompanyIds(customer.id).length===0);
+    if(unassigned.length)groups.push(renderCustomerGroup("Firma atanmamış",unassigned));
+  }
+  $("customersList").innerHTML=groups.join("")||empty("Filtreye uygun müşteri bulunamadı.");
+}
+
+function renderCustomerGroup(companyName,customers){
+  return `<section class="customer-group"><div class="customer-group-header"><h3>${esc(companyName)}</h3><span>${customers.length} müşteri</span></div>${customers.map(renderCustomerRecord).join("")}</section>`;
+}
+
+function renderCustomerRecord(customer){
+  const linkedIds=new Set(getCustomerCompanyIds(customer.id));
+  const linked=state.companies.filter(company=>linkedIds.has(company.id));
+  const available=state.companies.filter(company=>!linkedIds.has(company.id));
+  return `<div class="customer-record"><div class="customer-record-main"><div><h4>${esc(customer.name)}</h4><div class="company-tags">${linked.length?linked.map(company=>`<span class="company-tag">${esc(company.name)}<button type="button" title="Firma bağlantısını kaldır" onclick="removeCustomerCompany('${customer.id}','${company.id}')">×</button></span>`).join(""):'<span class="muted">Firma atanmamış</span>'}</div></div>${available.length?`<div class="customer-company-editor"><select>${available.map(company=>`<option value="${company.id}">${esc(company.name)}</option>`).join("")}</select><button class="secondary" type="button" onclick="addCustomerCompany('${customer.id}', this.previousElementSibling.value)">Firma ekle</button></div>`:'<span class="muted">Tüm firmalara bağlı</span>'}</div></div>`;
+}
+
+async function addCustomerCompany(customerId,companyId){
+  if(!companyId)return;
+  const {error}=await db.from("customer_companies").insert({customer_id:customerId,company_id:companyId,created_by:state.user.id});
+  if(error)return handleError(error,"Firma bağlantısı eklenemedi");
+  state.customerCompanies.push({customer_id:customerId,company_id:companyId}); renderCustomers(); renderCustomerSearchResults(); toast("Müşteri firmaya bağlandı.");
+}
+
+async function removeCustomerCompany(customerId,companyId){
+  if(!confirm("Bu müşterinin firma bağlantısı kaldırılsın mı? Geçmiş işler etkilenmez."))return;
+  const {error}=await db.from("customer_companies").delete().eq("customer_id",customerId).eq("company_id",companyId);
+  if(error)return handleError(error,"Firma bağlantısı kaldırılamadı");
+  state.customerCompanies=state.customerCompanies.filter(link=>!(link.customer_id===customerId&&link.company_id===companyId)); renderCustomers(); renderCustomerSearchResults(); toast("Firma bağlantısı kaldırıldı.");
+}
+window.addCustomerCompany=addCustomerCompany;
+window.removeCustomerCompany=removeCustomerCompany;
 
 function toggleCardField(){const show=["Kredi Kartı","Sanal Kart"].includes(value("paymentMethod"));$("cardField").classList.toggle("hidden",!show);if(!show)$("paymentCardId").value="";}
 async function fetchRate(currency){try{const response=await fetch(`https://open.er-api.com/v6/latest/${currency}`);const data=await response.json();if(data?.rates?.TRY)$("exchangeRate").value=Number(data.rates.TRY).toFixed(6);else throw new Error();}catch{toast("Kur alınamadı; elle yazabilirsin.","error");}}
@@ -504,7 +609,7 @@ async function migrateLegacyDocuments(){const button=$("migrateDocumentsButton")
 function dataUrlToBlob(dataUrl){const [head,body]=dataUrl.split(",");const mime=head.match(/data:(.*?);/)?.[1]||"application/octet-stream";const bytes=atob(body);const arr=new Uint8Array(bytes.length);for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);return new Blob([arr],{type:mime});}
 
 async function getAllRows(table,columns="*",modify=q=>q){let out=[];for(let from=0;;from+=1000){let query=db.from(table).select(columns).range(from,from+999);query=modify(query);const {data,error}=await query;if(error)throw error;out.push(...data);if(data.length<1000)break;}return out;}
-async function downloadFullBackup(){if(!window.JSZip)return toast("Yedekleme bileşeni yüklenemedi.","error");const button=$("downloadBackupButton");setBusy(button,true,"Yedek hazırlanıyor...");try{const progress=$("backupProgress");progress.textContent="Veritabanı kayıtları alınıyor...";const tables=["companies","customers","payment_cards","jobs","job_customers","job_documents","audit_logs","app_settings"];const backup={version:2,created_at:new Date().toISOString(),tables:{}};for(const table of tables){backup.tables[table]=await getAllRows(table,table==="job_documents"?"id,job_id,kind,original_name,storage_path,mime_type,size_bytes,uploaded_by,created_at,deleted_at":"*");}const zip=new JSZip();zip.file("veritabani-yedegi.json",JSON.stringify(backup,null,2));const docs=backup.tables.job_documents.filter(d=>!d.deleted_at);for(let i=0;i<docs.length;i++){const d=docs[i];progress.textContent=`Faturalar ekleniyor: ${i+1}/${docs.length}`;let blob;if(d.storage_path){const {data,error}=await db.storage.from("invoices").download(d.storage_path);if(error)throw error;blob=data;}else{const {data,error}=await db.from("job_documents").select("legacy_data_url").eq("id",d.id).single();if(error)throw error;blob=dataUrlToBlob(data.legacy_data_url);}zip.file(`faturalar/${d.job_id}/${d.original_name}`,blob);}progress.textContent="ZIP dosyası oluşturuluyor...";const result=await zip.generateAsync({type:"blob",compression:"DEFLATE",compressionOptions:{level:6}});downloadBlob(result,`MIA_Otel_Sistem_Yedek_${new Date().toISOString().slice(0,10)}.zip`);progress.textContent="Yedek başarıyla indirildi.";toast("Tam sistem yedeği hazırlandı.");}catch(e){handleError(e,"Yedek oluşturulamadı");}finally{setBusy(button,false);}}
+async function downloadFullBackup(){if(!window.JSZip)return toast("Yedekleme bileşeni yüklenemedi.","error");const button=$("downloadBackupButton");setBusy(button,true,"Yedek hazırlanıyor...");try{const progress=$("backupProgress");progress.textContent="Veritabanı kayıtları alınıyor...";const tables=["companies","customers","customer_companies","payment_cards","jobs","job_customers","job_documents","audit_logs","app_settings"];const backup={version:3,created_at:new Date().toISOString(),tables:{}};for(const table of tables){backup.tables[table]=await getAllRows(table,table==="job_documents"?"id,job_id,kind,original_name,storage_path,mime_type,size_bytes,uploaded_by,created_at,deleted_at":"*");}const zip=new JSZip();zip.file("veritabani-yedegi.json",JSON.stringify(backup,null,2));const docs=backup.tables.job_documents.filter(d=>!d.deleted_at);for(let i=0;i<docs.length;i++){const d=docs[i];progress.textContent=`Faturalar ekleniyor: ${i+1}/${docs.length}`;let blob;if(d.storage_path){const {data,error}=await db.storage.from("invoices").download(d.storage_path);if(error)throw error;blob=data;}else{const {data,error}=await db.from("job_documents").select("legacy_data_url").eq("id",d.id).single();if(error)throw error;blob=dataUrlToBlob(data.legacy_data_url);}zip.file(`faturalar/${d.job_id}/${d.original_name}`,blob);}progress.textContent="ZIP dosyası oluşturuluyor...";const result=await zip.generateAsync({type:"blob",compression:"DEFLATE",compressionOptions:{level:6}});downloadBlob(result,`MIA_Otel_Sistem_Yedek_${new Date().toISOString().slice(0,10)}.zip`);progress.textContent="Yedek başarıyla indirildi.";toast("Tam sistem yedeği hazırlandı.");}catch(e){handleError(e,"Yedek oluşturulamadı");}finally{setBusy(button,false);}}
 function downloadBlob(blob,name){const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 
 function handleError(error, fallback) { console.error(error); toast(`${fallback}: ${error?.message || "Bilinmeyen hata"}`, "error"); }

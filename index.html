@@ -75,13 +75,15 @@
           <label class="span-2">Oda tipi<input id="roomType"></label>
           <label>Check-in<input id="checkIn" type="date"></label>
           <label>Check-out<input id="checkOut" type="date"></label>
-          <label class="span-2 customer-picker">Misafirler
+          <div class="span-2 customer-picker">
+            <label for="customerSearch">Misafirler</label>
             <input id="customerSearch" type="search" placeholder="Misafir ismiyle ara..." autocomplete="off">
+            <label class="customer-company-only"><input id="customerCompanyOnly" type="checkbox" checked> Yalnızca seçili firmanın müşterilerini göster</label>
             <div id="customerSearchResults" class="customer-search-results"></div>
             <div id="selectedCustomers" class="selected-customers"></div>
             <select id="customerIds" class="hidden" multiple aria-hidden="true"></select>
             <small>İsmi yazıp sonuca tıklayarak bir veya birden fazla misafir seçebilirsin.</small>
-          </label>
+          </div>
           <label class="inline-create span-2">Yeni müşteri<input id="newCustomerName" placeholder="Ad Soyad"><button id="addCustomerButton" type="button" class="secondary">Kaydet ve seç</button></label>
           <label>Talep eden<input id="requester"></label>
           <label>Talep kanalı<select id="requestChannel"><option>WhatsApp</option><option>Mail</option><option>Telefon</option><option>Diğer</option></select></label>
@@ -128,8 +130,18 @@
       </section>
 
       <section id="page-customers" class="page">
-        <div class="page-head"><div><p class="eyebrow">CARİ KARTLAR</p><h1>Müşteriler</h1></div></div>
-        <div class="panel inline-form"><input id="customerPageName" placeholder="Yeni müşteri adı"><button id="customerPageAdd" class="primary">Müşteri ekle</button></div>
+        <div class="page-head"><div><p class="eyebrow">FİRMA BAZLI CARİ KARTLAR</p><h1>Müşteriler</h1></div></div>
+        <div class="panel customer-create-panel">
+          <h2>Yeni müşteri ekle</h2>
+          <div class="inline-form"><input id="customerPageName" placeholder="Ad Soyad"><button id="customerPageAdd" class="primary">Müşteri ekle</button></div>
+          <p class="muted">Müşterinin bağlı olduğu bir veya birden fazla firmayı seç:</p>
+          <div id="customerPageCompanyChecks" class="company-check-grid"></div>
+        </div>
+        <div class="panel customer-list-filters">
+          <label>Müşteri ara<input id="customerListSearch" type="search" placeholder="Ad soyad..."></label>
+          <label>Firma filtresi<select id="customerListCompanyFilter"><option value="">Tüm firmalar</option></select></label>
+          <strong id="customerListSummary">0 müşteri</strong>
+        </div>
         <div id="customersList" class="simple-list"></div>
       </section>
 
