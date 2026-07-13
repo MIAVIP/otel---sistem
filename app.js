@@ -323,8 +323,9 @@ function jobCard(job, options={}) {
   const names = (job.customers||[]).map(c=>c.name).join(", ") || "-";
   const profit = (Number(job.sale)-Number(job.cost));
   const deleted = !!job.deleted_at;
+  const saleMissing = Number(job.sale) === 0;
   return `<article class="job-card">
-    <div class="job-top"><div class="job-title"><h3>${esc(job.hotel_name)}</h3><p>${esc(job.company_name)} · ${esc(names)}</p></div><div class="job-sale"><span>Satış</span><strong>${money(job.sale,job.currency)}</strong></div></div>
+    <div class="job-top"><div class="job-title"><h3>${esc(job.hotel_name)}</h3><p>${esc(job.company_name)} · ${esc(names)}</p></div><div class="job-sale ${saleMissing?"sale-missing":""}" ${saleMissing?'title="Satış tutarı girilmemiş"':""}><span>Satış${saleMissing?" · Girilmedi":""}</span><strong>${money(job.sale,job.currency)}</strong></div></div>
     <div class="badges">
       ${badge(`Gelen Fatura: ${job.hotel_invoice_status}`,job.hotel_invoice_status!=="Bekliyor")}
       ${badge(`Giden Fatura: ${job.customer_invoice_status}`,job.customer_invoice_status==="Kesildi")}
@@ -335,7 +336,7 @@ function jobCard(job, options={}) {
       <div><span>Tarih</span><b>${dateTR(job.check_in)} – ${dateTR(job.check_out)}</b></div>
       <div><span>Oda</span><b>${esc(job.room_count)} · ${esc(job.room_type||"-")}</b></div>
       <div><span>Maliyet</span><b>${money(job.cost,job.currency)}</b></div>
-      <div><span>Satış</span><b>${money(job.sale,job.currency)}</b></div>
+      <div class="${saleMissing?"sale-missing":""}" ${saleMissing?'title="Satış tutarı girilmemiş"':""}><span>Satış${saleMissing?" · Girilmedi":""}</span><b>${money(job.sale,job.currency)}</b></div>
       <div><span>Kâr</span><b>${money(profit,job.currency)}</b></div>
     </div>
     <div class="job-actions">
