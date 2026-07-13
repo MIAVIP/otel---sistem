@@ -195,7 +195,10 @@ function getCustomerCompanyNames(customerId) {
 
 function renderCustomerPageCompanyChecks() {
   $("customerPageCompanyChecks").innerHTML = state.companies.map(company => `
-    <label class="company-check"><input type="checkbox" value="${company.id}"> ${esc(company.name)}</label>`).join("");
+    <div class="company-check">
+      <label><input type="checkbox" value="${company.id}"><span>${esc(company.name)}</span></label>
+      <button class="company-delete-button" type="button" title="Firmayı sil" aria-label="${esc(company.name)} firmasını sil" onclick="archiveCompany('${company.id}')">Sil</button>
+    </div>`).join("");
 }
 
 function renderCustomerSearchResults() {
@@ -615,7 +618,34 @@ function renderCustomerRecord(customer){
   const linkedIds=new Set(getCustomerCompanyIds(customer.id));
   const linked=state.companies.filter(company=>linkedIds.has(company.id));
   const available=state.companies.filter(company=>!linkedIds.has(company.id));
-  return `<div class="customer-record"><div class="customer-record-main"><div><h4>${esc(customer.name)}</h4><div class="company-tags">${linked.length?linked.map(company=>`<span class="company-tag">${esc(company.name)}<button type="button" title="Firma bağlantısını kaldır" onclick="removeCustomerCompany('${customer.id}','${company.id}')">×</button></span>`).join(""):'<span class="muted">Firma atanmamış</span>'}</div></div>${available.length?`<div class="customer-company-editor"><select>${available.map(company=>`<option value="${company.id}">${esc(company.name)}</option>`).join("")}</select><button class="secondary" type="button" onclick="addCustomerCompany('${customer.id}', this.previousElementSibling.value)">Firma ekle</button></div>`:'<span class="muted">Tüm firmalara bağlı</span>'}</div></div>`;
+  const companyEditor=available.length?`<div class="customer-company-editor"><select>${available.map(company=>`<option value="${company.id}">${esc(company.name)}</option>`).join("")}</select><button class="secondary" type="button" onclick="addCustomerCompany('${customer.id}', this.previousElementSibling.value)">Firma ekle</button></div>`:'<span class="muted">Tüm firmalara bağlı</span>';
+  return `<div class="customer-record"><div class="customer-record-main"><div><h4>${esc(customer.name)}</h4><div class="company-tags">${linked.length?linked.map(company=>`<span class="company-tag">${esc(company.name)}<button type="button" title="Firma bağlantısını kaldır" onclick="removeCustomerCompany('${customer.id}','${company.id}')">×</button></span>`).join(""):'<span class="muted">Firma atanmamış</span>'}</div></div><div class="customer-record-actions">${companyEditor}<button class="danger customer-delete-button" type="button" onclick="archiveCustomer('${customer.id}')">Müşteriyi sil</button></div></div></div>`;
+}
+
+function linkedRecordMessage(result, label){
+  const active=Number(result?.active_job_count)||0, trashed=Number(result?.trashed_job_count)||0, total=Number(result?.job_count)||0;
+  const detail=[active?`${active} aktif`:"",trashed?`${trashed} çöp kutusunda`:""].filter(Boolean).join(", ");
+  return `${label} silinmedi: ${total} işe bağlı${detail?` (${detail})`:""}. Önce ilgili iş kayıtlarındaki bağlantıyı değiştir.`;
+}
+
+async function archiveCompany(companyId){
+  const company=state.companies.find(item=>item.id===companyId); if(!company)return;
+  if(!confirm(`"${company.name}" firması silinsin mi?\n\nMüşteriler silinmez; yalnızca bu firmayla bağlantıları kaldırılır.`))return;
+  try{
+    const {data,error}=await db.rpc("archive_company_v1",{p_company_id:companyId}); if(error)throw error;
+    if(!data?.ok)return toast(data?.code==="IN_USE"?linkedRecordMessage(data,"Firma"):(data?.message||"Firma silinemedi."),"error");
+    await loadLookups(); renderCustomers(); toast(`${company.name} firması silindi.`);
+  }catch(error){handleError(error,"Firma silinemedi");}
+}
+
+async function archiveCustomer(customerId){
+  const customer=state.customers.find(item=>item.id===customerId); if(!customer)return;
+  if(!confirm(`"${customer.name}" adlı müşteri silinsin mi?\n\nBağlı olduğu tüm firma bağlantıları da kaldırılır.`))return;
+  try{
+    const {data,error}=await db.rpc("archive_customer_v1",{p_customer_id:customerId}); if(error)throw error;
+    if(!data?.ok)return toast(data?.code==="IN_USE"?linkedRecordMessage(data,"Müşteri"):(data?.message||"Müşteri silinemedi."),"error");
+    await loadLookups(); renderCustomers(); toast(`${customer.name} adlı müşteri silindi.`);
+  }catch(error){handleError(error,"Müşteri silinemedi");}
 }
 
 async function addCustomerCompany(customerId,companyId){
@@ -633,6 +663,8 @@ async function removeCustomerCompany(customerId,companyId){
 }
 window.addCustomerCompany=addCustomerCompany;
 window.removeCustomerCompany=removeCustomerCompany;
+window.archiveCompany=archiveCompany;
+window.archiveCustomer=archiveCustomer;
 
 function toggleCardField(){const show=["Kredi Kartı","Sanal Kart"].includes(value("paymentMethod"));$("cardField").classList.toggle("hidden",!show);if(!show)$("paymentCardId").value="";}
 async function fetchRate(currency){try{const response=await fetch(`https://open.er-api.com/v6/latest/${currency}`);const data=await response.json();if(data?.rates?.TRY)$("exchangeRate").value=Number(data.rates.TRY).toFixed(6);else throw new Error();}catch{toast("Kur alınamadı; elle yazabilirsin.","error");}}
