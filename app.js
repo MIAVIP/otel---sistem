@@ -27,6 +27,7 @@ const esc = input => String(input ?? "").replace(/[&<>'"]/g, c => ({"&":"&amp;",
 const money = (amount, currency = "TL") => new Intl.NumberFormat("tr-TR", {style:"currency", currency: currency === "TL" ? "TRY" : currency, maximumFractionDigits:2}).format(Number(amount)||0);
 const moneyTry = amount => money(amount, "TL");
 const dateTR = d => d ? new Intl.DateTimeFormat("tr-TR").format(new Date(`${d}T00:00:00`)) : "-";
+const dateTimeTR = d => d ? new Intl.DateTimeFormat("tr-TR",{dateStyle:"short",timeStyle:"short"}).format(new Date(d)) : "-";
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 function toast(message, type = "success") {
@@ -115,7 +116,7 @@ function bindEvents() {
     if (value("currency") === "TL") $("exchangeRate").value = "1";
     else await fetchRate(value("currency"));
   });
-  ["filterCompanyId","filterJobType","filterDateFrom","filterDateTo","filterCurrency","filterPaymentMethod","filterHotelInvoice","filterCustomerInvoice","filterPayment","filterSort"]
+  ["filterCompanyId","filterJobType","filterDateField","filterDateFrom","filterDateTo","filterCurrency","filterPaymentMethod","filterHotelInvoice","filterCustomerInvoice","filterPayment","filterSort"]
     .forEach(id => $(id).addEventListener("change", () => {state.currentPage=0; loadJobs();}));
   $("searchInput").addEventListener("input", () => {
     clearTimeout(state.searchTimer);
@@ -267,11 +268,11 @@ async function loadDashboard() {
   $("recentJobs").innerHTML = jobs.items.length ? jobs.items.map(jobCard).join("") : empty("Henüz iş kaydı bulunmuyor.");
 }
 
-async function fetchJobs({search="", hotelInvoice="", customerInvoice="", payment="", companyId="", jobType="", dateFrom="", dateTo="", currency="", paymentMethod="", sort="created_desc", includeDeleted=false, onlyDeleted=false, limit=PAGE_SIZE, offset=0}={}) {
-  const {data,error} = await db.rpc("search_jobs_v2", {
+async function fetchJobs({search="", hotelInvoice="", customerInvoice="", payment="", companyId="", jobType="", dateField="check_in", dateFrom="", dateTo="", currency="", paymentMethod="", sort="created_desc", includeDeleted=false, onlyDeleted=false, limit=PAGE_SIZE, offset=0}={}) {
+  const {data,error} = await db.rpc("search_jobs_v3", {
     p_search:search, p_hotel_invoice_status:hotelInvoice, p_customer_invoice_status:customerInvoice,
     p_payment_status:payment, p_company_id:companyId||null, p_job_type:jobType,
-    p_date_from:dateFrom||null, p_date_to:dateTo||null, p_currency:currency,
+    p_date_field:dateField||"check_in", p_date_from:dateFrom||null, p_date_to:dateTo||null, p_currency:currency,
     p_payment_method:paymentMethod, p_sort:sort, p_include_deleted:includeDeleted,
     p_only_deleted:onlyDeleted, p_limit:limit, p_offset:offset
   });
@@ -299,7 +300,7 @@ async function loadJobs() {
 
 function getCurrentJobFilters() {
   return {
-    search:value("searchInput"), companyId:value("filterCompanyId"), jobType:value("filterJobType"),
+    search:value("searchInput"), companyId:value("filterCompanyId"), jobType:value("filterJobType"), dateField:value("filterDateField")||"check_in",
     dateFrom:value("filterDateFrom"), dateTo:value("filterDateTo"), currency:value("filterCurrency"),
     paymentMethod:value("filterPaymentMethod"), hotelInvoice:value("filterHotelInvoice"),
     customerInvoice:value("filterCustomerInvoice"), payment:value("filterPayment"), sort:value("filterSort")||"created_desc"
@@ -309,6 +310,7 @@ function getCurrentJobFilters() {
 function clearJobFilters() {
   ["searchInput","filterCompanyId","filterJobType","filterDateFrom","filterDateTo","filterCurrency","filterPaymentMethod","filterHotelInvoice","filterCustomerInvoice","filterPayment"]
     .forEach(id => $(id).value="");
+  $("filterDateField").value="check_in";
   $("filterSort").value="created_desc";
   state.currentPage=0;
   loadJobs();
@@ -326,6 +328,7 @@ function jobCard(job, options={}) {
       ${badge(`Ödeme: ${job.payment_status}`,job.payment_status==="Alındı")}
     </div>
     <div class="job-grid">
+      <div><span>İşin Girildiği Tarih</span><b>${dateTimeTR(job.created_at)}</b></div>
       <div><span>Tarih</span><b>${dateTR(job.check_in)} – ${dateTR(job.check_out)}</b></div>
       <div><span>Oda</span><b>${esc(job.room_count)} · ${esc(job.room_type||"-")}</b></div>
       <div><span>Maliyet</span><b>${money(job.cost,job.currency)}</b></div>
@@ -373,6 +376,7 @@ async function exportFilteredJobs() {
       return {
         "Firma":job.company_name||"", "Otel":job.hotel_name||"",
         "Misafirler":(job.customers||[]).map(customer=>customer.name).join(", "),
+        "İşin Girildiği Tarih":job.created_at?new Date(job.created_at).toLocaleString("tr-TR"):"",
         "Oda Sayısı":Number(job.room_count)||0, "Oda Tipi":job.room_type||"",
         "Check-in":job.check_in||"", "Check-out":job.check_out||"", "Geceleme":nights,
         "Oda Gece":nights*(Number(job.room_count)||0), "Talep Eden":job.requester||"",
@@ -400,8 +404,8 @@ async function exportFilteredJobs() {
     const companyName = state.companies.find(company=>company.id===filters.companyId)?.name || "";
     const filterSheet = XLSX.utils.aoa_to_sheet([
       ["Uygulanan Filtre", "Değer"], ["Genel arama", filters.search||"Tümü"], ["Firma", companyName||"Tümü"],
-      ["İş tipi", filters.jobType||"Tümü"], ["Check-in başlangıç", filters.dateFrom||"Tümü"],
-      ["Check-in bitiş", filters.dateTo||"Tümü"], ["Para birimi", filters.currency||"Tümü"],
+      ["İş tipi", filters.jobType||"Tümü"], ["Tarih ölçütü", filters.dateField==="created_at"?"İşin girildiği tarih":"Check-in tarihi"],
+      ["Tarih başlangıç", filters.dateFrom||"Tümü"], ["Tarih bitiş", filters.dateTo||"Tümü"], ["Para birimi", filters.currency||"Tümü"],
       ["Ödeme yöntemi", filters.paymentMethod||"Tümü"], ["Gelen fatura durumu", filters.hotelInvoice||"Tümü"],
       ["Giden fatura durumu", filters.customerInvoice||"Tümü"], ["Ödeme durumu", filters.payment||"Tümü"],
       ["Sıralama", $("filterSort").selectedOptions[0]?.textContent||"En son eklenen"],
@@ -506,6 +510,7 @@ function fillJobForm(job) {
   $("jobFormTitle").textContent="İşi Düzenle"; $("saveJobButton").textContent="Değişiklikleri kaydet"; $("cancelEditButton").classList.remove("hidden");
   const map={jobId:job.id,jobVersion:job.version,companyId:job.company_id,hotelName:job.hotel_name,roomCount:job.room_count,roomType:job.room_type||"",checkIn:job.check_in||"",checkOut:job.check_out||"",requester:job.requester||"",requestChannel:job.request_channel,jobType:job.job_type,cost:job.cost,sale:job.sale,currency:job.currency,exchangeRate:job.exchange_rate,paymentMethod:job.payment_method,paymentCardId:job.payment_card_id||"",hotelInvoiceStatus:job.hotel_invoice_status,customerInvoiceStatus:job.customer_invoice_status,paymentStatus:job.payment_status,extras:job.extras||"",notes:job.notes||""};
   Object.entries(map).forEach(([id,val])=>$(id).value=val);
+  $("jobCreatedAt").value=dateTimeTR(job.created_at);$("jobCreatedAtField").classList.remove("hidden");
   const customerIds=(job.customers||[]).map(c=>c.id); [...$("customerIds").options].forEach(o=>o.selected=customerIds.includes(o.value));
   $("customerSearch").value=""; renderSelectedCustomers(); renderCustomerSearchResults();
   renderExistingDocuments(job.documents||[],"incoming","existingIncomingDocuments");
@@ -520,6 +525,7 @@ function renderExistingDocuments(documents,kind,targetId){
 
 function resetJobForm(go=true) {
   $("jobForm").reset(); $("jobId").value=""; $("jobVersion").value=""; $("roomCount").value="1"; $("exchangeRate").value="1"; $("cost").value="0"; $("sale").value="0";
+  $("jobCreatedAt").value="";$("jobCreatedAtField").classList.add("hidden");
   [...$("customerIds").options].forEach(o=>o.selected=false); $("customerSearch").value=""; renderSelectedCustomers(); renderCustomerSearchResults();
   $("jobFormTitle").textContent="Yeni İş"; $("saveJobButton").textContent="İşi kaydet"; $("cancelEditButton").classList.add("hidden"); $("existingIncomingDocuments").innerHTML=""; $("existingOutgoingDocuments").innerHTML=""; toggleCardField();
   if(go) navigate("jobs");

@@ -68,6 +68,7 @@
         <div class="page-head"><div><p class="eyebrow">KAYIT</p><h1 id="jobFormTitle">Yeni İş</h1></div></div>
         <form id="jobForm" class="panel form-grid">
           <input id="jobId" type="hidden"><input id="jobVersion" type="hidden">
+          <label id="jobCreatedAtField" class="span-2 hidden">İşin sisteme girildiği tarih<input id="jobCreatedAt" type="text" readonly></label>
           <label>Firma*<select id="companyId" required></select></label>
           <label class="inline-create">Yeni firma<input id="newCompanyName" placeholder="Firma adı"><button id="addCompanyButton" type="button" class="secondary">Ekle</button></label>
           <label>Otel*<input id="hotelName" required></label>
@@ -122,14 +123,15 @@
             <label class="filter-search">Genel arama<input id="searchInput" type="search" placeholder="Firma, otel, müşteri, not ara..."></label>
             <label>Firma<select id="filterCompanyId"><option value="">Tüm firmalar</option></select></label>
             <label>İş tipi<select id="filterJobType"><option value="">Tümü</option><option>YURT İÇİ</option><option>YURT DIŞI</option></select></label>
-            <label>Check-in başlangıç<input id="filterDateFrom" type="date"></label>
-            <label>Check-in bitiş<input id="filterDateTo" type="date"></label>
+            <label>Tarih ölçütü<select id="filterDateField"><option value="check_in">Check-in tarihi</option><option value="created_at">İşin girildiği tarih</option></select></label>
+            <label>Tarih başlangıç<input id="filterDateFrom" type="date"></label>
+            <label>Tarih bitiş<input id="filterDateTo" type="date"></label>
             <label>Para birimi<select id="filterCurrency"><option value="">Tümü</option><option>TL</option><option>EUR</option><option>USD</option></select></label>
             <label>Ödeme yöntemi<select id="filterPaymentMethod"><option value="">Tümü</option><option>Havale</option><option>Kredi Kartı</option><option>Sanal Kart</option><option>Nakit</option><option>Cari</option></select></label>
             <label>Gelen fatura durumu<select id="filterHotelInvoice"><option value="">Tümü</option><option>Bekliyor</option><option>Geldi</option><option>Gerek Yok</option></select></label>
             <label>Giden fatura durumu<select id="filterCustomerInvoice"><option value="">Tümü</option><option>Kesilmedi</option><option>Kesildi</option></select></label>
             <label>Ödeme durumu<select id="filterPayment"><option value="">Tümü</option><option>Bekliyor</option><option>Alındı</option><option>Kısmi</option></select></label>
-            <label>Sıralama<select id="filterSort"><option value="created_desc">En son eklenen</option><option value="checkin_asc">Yaklaşan check-in</option><option value="checkin_desc">Check-in: yeniden eskiye</option><option value="sale_desc">En yüksek satış</option><option value="profit_desc">En yüksek kâr</option></select></label>
+            <label>Sıralama<select id="filterSort"><option value="created_desc">İş giriş tarihi: yeniden eskiye</option><option value="created_asc">İş giriş tarihi: eskiden yeniye</option><option value="checkin_asc">Yaklaşan check-in</option><option value="checkin_desc">Check-in: yeniden eskiye</option><option value="sale_desc">En yüksek satış</option><option value="profit_desc">En yüksek kâr</option></select></label>
           </div>
           <div class="filter-actions">
             <strong id="filterResultSummary">0 iş bulundu</strong>
