@@ -340,7 +340,7 @@ function jobCard(job, options={}) {
     </div>
     <div class="job-actions">
       ${(job.documents||[]).map((d,index)=>`<button class="secondary" title="${esc(d.original_name)}" onclick="openDocument('${d.id}')">${d.kind==="outgoing"?"Giden":"Gelen"} fatura${job.documents.length>1?` ${index+1}`:""}</button>`).join("")}
-      ${deleted ? `<button class="primary" onclick="restoreJob('${job.id}',${job.version})">Geri yükle</button>` : `<button class="secondary" onclick="editJob('${job.id}')">Düzenle</button><button class="danger" onclick="deleteJob('${job.id}',${job.version})">Çöpe taşı</button>`}
+      ${deleted ? `<button class="primary" onclick="restoreJob('${job.id}',${job.version})">Geri yükle</button><button class="danger" onclick="permanentlyDeleteJob('${job.id}',${job.version},this)">Kalıcı sil</button>` : `<button class="secondary" onclick="editJob('${job.id}')">Düzenle</button><button class="danger" onclick="deleteJob('${job.id}',${job.version})">Çöpe taşı</button>`}
     </div>
   </article>`;
 }
@@ -544,6 +544,39 @@ window.restoreJob = async (id,version) => {
   const {data,error}=await db.from("jobs").update({deleted_at:null}).eq("id",id).eq("version",version).select("id");
   if(error || !data?.length) return toast("Kayıt geri yüklenemedi.","error");
   toast("İş geri yüklendi."); await loadTrash();
+};
+
+async function removeStorageObjects(paths){
+  const failures=[];
+  for(let index=0;index<paths.length;index+=100){
+    const batch=paths.slice(index,index+100);
+    let lastError=null;
+    for(let attempt=0;attempt<3;attempt++){
+      const {error}=await db.storage.from("invoices").remove(batch);
+      lastError=error||null;
+      if(!lastError)break;
+      await sleep(350*(attempt+1));
+    }
+    if(lastError){console.error("Storage cleanup failed",lastError);failures.push(...batch);}
+  }
+  return failures;
+}
+
+window.permanentlyDeleteJob = async (id,version,button) => {
+  if(!confirm("Bu iş kalıcı olarak silinsin mi? İş kaydı, müşteri bağlantıları ve faturaları geri alınamaz."))return;
+  if(!confirm("SON ONAY: Bu işlem geri alınamaz. Kalıcı silmeye devam edilsin mi?"))return;
+  setBusy(button,true,"Kalıcı siliniyor...");
+  try{
+    const {data,error}=await db.rpc("purge_trashed_job_v1",{p_job_id:id,p_expected_version:version});
+    if(error)throw error;
+    if(!data?.ok)return toast(data?.message||"İş kalıcı olarak silinemedi.","error");
+    const paths=Array.isArray(data.storage_paths)?data.storage_paths.filter(Boolean):[];
+    const failures=await removeStorageObjects(paths);
+    await loadTrash();
+    if(failures.length)toast(`İş kalıcı silindi; ${failures.length} fatura dosyası temizlenirken uyarı oluştu.`,"error");
+    else toast("İş ve bağlı fatura dosyaları kalıcı olarak silindi.");
+  }catch(error){handleError(error,"İş kalıcı olarak silinemedi");}
+  finally{setBusy(button,false);}
 };
 
 window.openDocument = async id => {
