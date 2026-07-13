@@ -12,9 +12,12 @@ const state = {
   jobs: [],
   currentPage: 0,
   totalJobs: 0,
+  invoicePage: 0,
+  invoiceTotal: 0,
   reportCompanies: {},
   activePage: "dashboard",
-  searchTimer: null
+  searchTimer: null,
+  invoiceSearchTimer: null
 };
 
 const $ = id => document.getElementById(id);
@@ -93,6 +96,21 @@ function bindEvents() {
   $("customerListSearch").addEventListener("input", renderCustomers);
   $("customerListCompanyFilter").addEventListener("change", renderCustomers);
   $("exportFilteredJobsButton").addEventListener("click", exportFilteredJobs);
+  $("invoiceKindTabs").addEventListener("click", event => {
+    const button=event.target.closest("button[data-kind]"); if(!button)return;
+    $("invoiceKind").value=button.dataset.kind;
+    $("invoiceKindTabs").querySelectorAll("button").forEach(item=>item.classList.toggle("active",item===button));
+    state.invoicePage=0; loadInvoiceArchive();
+  });
+  ["invoiceDateField","invoiceDateFrom","invoiceDateTo","invoiceCompanyId","invoiceJobType"]
+    .forEach(id => $(id).addEventListener("change", () => {state.invoicePage=0; loadInvoiceArchive();}));
+  $("invoiceSearch").addEventListener("input", () => {
+    clearTimeout(state.invoiceSearchTimer);
+    state.invoiceSearchTimer=setTimeout(()=>{state.invoicePage=0;loadInvoiceArchive();},350);
+  });
+  $("invoiceThisMonthButton").addEventListener("click", setInvoiceThisMonth);
+  $("clearInvoiceFiltersButton").addEventListener("click", clearInvoiceFilters);
+  $("downloadFilteredInvoicesButton").addEventListener("click", downloadFilteredInvoices);
   $("currency").addEventListener("change", async () => {
     if (value("currency") === "TL") $("exchangeRate").value = "1";
     else await fetchRate(value("currency"));
@@ -128,7 +146,7 @@ async function navigate(page) {
   if (page === "newJob" && !value("jobId")) resetJobForm(false);
   if (page === "jobs") {state.currentPage=0; await loadJobs();}
   if (page === "customers") renderCustomers();
-  if (page === "invoices") await loadSpecialJobs("invoices");
+  if (page === "invoices") {state.invoicePage=0; await loadInvoiceArchive();}
   if (page === "payments") await loadSpecialJobs("payments");
   if (page === "reports") await loadReports();
   if (page === "trash") await loadTrash();
@@ -150,6 +168,7 @@ async function loadLookups() {
   fillSelect($("companyId"), state.companies, "Firma seç");
   fillSelect($("filterCompanyId"), state.companies, "Tüm firmalar");
   fillSelect($("customerListCompanyFilter"), state.companies, "Tüm firmalar");
+  fillSelect($("invoiceCompanyId"), state.companies, "Tüm firmalar");
   fillSelect($("customerIds"), state.customers, null);
   fillSelect($("paymentCardId"), state.cards, "Kart seç");
   renderCustomerPageCompanyChecks();
@@ -241,8 +260,8 @@ async function loadDashboard() {
   const cards = [
     ["Toplam İş", s.total_jobs || 0, ""], ["Toplam Maliyet", moneyTry(s.total_cost_try), ""],
     ["Toplam Satış", moneyTry(s.total_sale_try), ""], ["Toplam Kâr", moneyTry(s.total_profit_try), "good"],
-    ["Kâr Oranı", `%${profitRate.toFixed(1)}`, "good"], ["Bekleyen Otel Faturası", s.pending_hotel_invoices || 0, "warn"],
-    ["Kesilmeyen Müşteri Faturası", s.pending_customer_invoices || 0, "warn"], ["Bekleyen Ödeme", s.pending_payments || 0, "warn"]
+    ["Kâr Oranı", `%${profitRate.toFixed(1)}`, "good"], ["Bekleyen Gelen Fatura (Otel)", s.pending_hotel_invoices || 0, "warn"],
+    ["Kesilmeyen Giden Fatura", s.pending_customer_invoices || 0, "warn"], ["Bekleyen Ödeme", s.pending_payments || 0, "warn"]
   ];
   $("stats").innerHTML = cards.map(([label,val,cls]) => `<div class="stat ${cls}"><span>${esc(label)}</span><strong>${esc(val)}</strong></div>`).join("");
   $("recentJobs").innerHTML = jobs.items.length ? jobs.items.map(jobCard).join("") : empty("Henüz iş kaydı bulunmuyor.");
@@ -302,8 +321,8 @@ function jobCard(job, options={}) {
   return `<article class="job-card">
     <div class="job-top"><div class="job-title"><h3>${esc(job.hotel_name)}</h3><p>${esc(job.company_name)} · ${esc(names)}</p></div><div class="job-sale"><span>Satış</span><strong>${money(job.sale,job.currency)}</strong></div></div>
     <div class="badges">
-      ${badge(`Otel Fatura: ${job.hotel_invoice_status}`,job.hotel_invoice_status!=="Bekliyor")}
-      ${badge(`Müşteri Fatura: ${job.customer_invoice_status}`,job.customer_invoice_status==="Kesildi")}
+      ${badge(`Gelen Fatura: ${job.hotel_invoice_status}`,job.hotel_invoice_status!=="Bekliyor")}
+      ${badge(`Giden Fatura: ${job.customer_invoice_status}`,job.customer_invoice_status==="Kesildi")}
       ${badge(`Ödeme: ${job.payment_status}`,job.payment_status==="Alındı")}
     </div>
     <div class="job-grid">
@@ -314,7 +333,7 @@ function jobCard(job, options={}) {
       <div><span>Kâr</span><b>${money(profit,job.currency)}</b></div>
     </div>
     <div class="job-actions">
-      ${(job.documents||[]).map((d,i)=>`<button class="secondary" onclick="openDocument('${d.id}')">Fatura${job.documents.length>1?` ${i+1}`:""}</button>`).join("")}
+      ${(job.documents||[]).map((d,index)=>`<button class="secondary" title="${esc(d.original_name)}" onclick="openDocument('${d.id}')">${d.kind==="outgoing"?"Giden":"Gelen"} fatura${job.documents.length>1?` ${index+1}`:""}</button>`).join("")}
       ${deleted ? `<button class="primary" onclick="restoreJob('${job.id}',${job.version})">Geri yükle</button>` : `<button class="secondary" onclick="editJob('${job.id}')">Düzenle</button><button class="danger" onclick="deleteJob('${job.id}',${job.version})">Çöpe taşı</button>`}
     </div>
   </article>`;
@@ -366,9 +385,10 @@ async function exportFilteredJobs() {
         "Kâr Yüzdesi (%)":costNet ? round2((profitNet/costNet)*100) : 0,
         "Maliyet TL":round2(cost*exchange), "Satış TL":round2(sale*exchange),
         "Kâr TL":round2(profit*exchange), "Ödeme Yöntemi":job.payment_method||"",
-        "Kart":job.card_name||"", "Otel Faturası":job.hotel_invoice_status||"",
-        "Müşteri Faturası":job.customer_invoice_status||"", "Ödeme":job.payment_status||"",
-        "Fatura Sayısı":(job.documents||[]).length, "Ekstralar":job.extras||"",
+        "Kart":job.card_name||"", "Gelen Fatura Durumu":job.hotel_invoice_status||"",
+        "Giden Fatura Durumu":job.customer_invoice_status||"", "Ödeme":job.payment_status||"",
+        "Gelen Fatura Sayısı":(job.documents||[]).filter(document=>document.kind!=="outgoing").length,
+        "Giden Fatura Sayısı":(job.documents||[]).filter(document=>document.kind==="outgoing").length, "Ekstralar":job.extras||"",
         "Notlar":job.notes||"", "Kayıt ID":job.id
       };
     });
@@ -382,8 +402,8 @@ async function exportFilteredJobs() {
       ["Uygulanan Filtre", "Değer"], ["Genel arama", filters.search||"Tümü"], ["Firma", companyName||"Tümü"],
       ["İş tipi", filters.jobType||"Tümü"], ["Check-in başlangıç", filters.dateFrom||"Tümü"],
       ["Check-in bitiş", filters.dateTo||"Tümü"], ["Para birimi", filters.currency||"Tümü"],
-      ["Ödeme yöntemi", filters.paymentMethod||"Tümü"], ["Otel faturası", filters.hotelInvoice||"Tümü"],
-      ["Müşteri faturası", filters.customerInvoice||"Tümü"], ["Ödeme durumu", filters.payment||"Tümü"],
+      ["Ödeme yöntemi", filters.paymentMethod||"Tümü"], ["Gelen fatura durumu", filters.hotelInvoice||"Tümü"],
+      ["Giden fatura durumu", filters.customerInvoice||"Tümü"], ["Ödeme durumu", filters.payment||"Tümü"],
       ["Sıralama", $("filterSort").selectedOptions[0]?.textContent||"En son eklenen"],
       ["Dışa aktarma tarihi", new Date().toLocaleString("tr-TR")], ["Toplam iş", jobs.length]
     ]);
@@ -430,10 +450,23 @@ async function saveJob(event) {
       if(!state.customerCompanies.some(link=>link.customer_id===customerId&&link.company_id===payload.company_id))
         state.customerCompanies.push({customer_id:customerId,company_id:payload.company_id});
     });
-    const files = [...$("invoiceFiles").files];
-    for (let i=0;i<files.length;i++) {
-      button.textContent = `Fatura yükleniyor (${i+1}/${files.length})...`;
-      await uploadDocument(saved.id, files[i]);
+    const incomingFiles=[...$("incomingInvoiceFiles").files];
+    const outgoingFiles=[...$("outgoingInvoiceFiles").files];
+    for (let i=0;i<incomingFiles.length;i++) {
+      button.textContent=`Gelen fatura yükleniyor (${i+1}/${incomingFiles.length})...`;
+      await uploadDocument(saved.id,incomingFiles[i],"incoming");
+    }
+    if(incomingFiles.length){
+      const {error:statusError}=await db.from("jobs").update({hotel_invoice_status:"Geldi"}).eq("id",saved.id);
+      if(statusError)throw statusError;
+    }
+    for (let i=0;i<outgoingFiles.length;i++) {
+      button.textContent=`Giden fatura yükleniyor (${i+1}/${outgoingFiles.length})...`;
+      await uploadDocument(saved.id,outgoingFiles[i],"outgoing");
+    }
+    if(outgoingFiles.length){
+      const {error:statusError}=await db.from("jobs").update({customer_invoice_status:"Kesildi"}).eq("id",saved.id);
+      if(statusError)throw statusError;
     }
     toast("İş güvenle kaydedildi.");
     resetJobForm();
@@ -445,13 +478,15 @@ async function saveJob(event) {
   } finally {setBusy(button,false);}
 }
 
-async function uploadDocument(jobId,file) {
+async function uploadDocument(jobId,file,kind) {
   if (file.size > 20*1024*1024) throw new Error(`${file.name}: Dosya 20 MB sınırını aşıyor.`);
+  if(!["application/pdf","image/jpeg","image/png","image/webp"].includes(file.type))throw new Error(`${file.name}: Yalnızca PDF, JPG, PNG veya WEBP yüklenebilir.`);
+  if(!["incoming","outgoing"].includes(kind))throw new Error("Fatura türü geçersiz.");
   const safeName = file.name.normalize("NFKD").replace(/[^a-zA-Z0-9._-]/g,"_").slice(-140);
-  const path = `${jobId}/${crypto.randomUUID()}-${safeName}`;
+  const path = `${jobId}/${kind}/${crypto.randomUUID()}-${safeName}`;
   const {error:uploadError} = await db.storage.from("invoices").upload(path,file,{contentType:file.type||"application/octet-stream",upsert:false});
   if (uploadError) throw uploadError;
-  const {error:metaError} = await db.from("job_documents").insert({job_id:jobId,original_name:file.name,storage_path:path,mime_type:file.type,size_bytes:file.size,uploaded_by:state.user.id});
+  const {error:metaError} = await db.from("job_documents").insert({job_id:jobId,kind,original_name:file.name,storage_path:path,mime_type:file.type,size_bytes:file.size,uploaded_by:state.user.id});
   if (metaError) {await db.storage.from("invoices").remove([path]); throw metaError;}
 }
 
@@ -460,7 +495,7 @@ window.editJob = async id => {
     const {data,error}=await db.from("jobs").select("*").eq("id",id).single(); if(error) throw error;
     const [{data:company},{data:links},{data:docs}] = await Promise.all([
       db.from("companies").select("name").eq("id",data.company_id).single(), db.from("job_customers").select("customer_id").eq("job_id",id),
-      db.from("job_documents").select("id,original_name,storage_path,mime_type,size_bytes,legacy_data_url").eq("job_id",id).is("deleted_at",null)
+      db.from("job_documents").select("id,kind,original_name,storage_path,mime_type,size_bytes,legacy_data_url,created_at").eq("job_id",id).is("deleted_at",null)
     ]);
     const job={...data,company_name:company?.name,customers:(links||[]).map(l=>state.customers.find(c=>c.id===l.customer_id)).filter(Boolean),documents:(docs||[]).map(d=>({...d,is_legacy:!!d.legacy_data_url}))};
     fillJobForm(job); navigate("newJob");
@@ -473,14 +508,20 @@ function fillJobForm(job) {
   Object.entries(map).forEach(([id,val])=>$(id).value=val);
   const customerIds=(job.customers||[]).map(c=>c.id); [...$("customerIds").options].forEach(o=>o.selected=customerIds.includes(o.value));
   $("customerSearch").value=""; renderSelectedCustomers(); renderCustomerSearchResults();
-  $("existingDocuments").innerHTML=(job.documents||[]).map(d=>`<div class="document-item"><span>${esc(d.original_name)}</span><button type="button" class="secondary" onclick="openDocument('${d.id}')">Aç</button></div>`).join("");
+  renderExistingDocuments(job.documents||[],"incoming","existingIncomingDocuments");
+  renderExistingDocuments(job.documents||[],"outgoing","existingOutgoingDocuments");
   toggleCardField();
+}
+
+function renderExistingDocuments(documents,kind,targetId){
+  const rows=documents.filter(document=>(document.kind==="outgoing"?"outgoing":"incoming")===kind);
+  $(targetId).innerHTML=rows.map(document=>`<div class="document-item"><span><span class="document-kind ${kind}">${kind==="incoming"?"GELEN":"GİDEN"}</span> ${esc(document.original_name)}</span><button type="button" class="secondary" onclick="openDocument('${document.id}')">Aç</button></div>`).join("");
 }
 
 function resetJobForm(go=true) {
   $("jobForm").reset(); $("jobId").value=""; $("jobVersion").value=""; $("roomCount").value="1"; $("exchangeRate").value="1"; $("cost").value="0"; $("sale").value="0";
   [...$("customerIds").options].forEach(o=>o.selected=false); $("customerSearch").value=""; renderSelectedCustomers(); renderCustomerSearchResults();
-  $("jobFormTitle").textContent="Yeni İş"; $("saveJobButton").textContent="İşi kaydet"; $("cancelEditButton").classList.add("hidden"); $("existingDocuments").innerHTML=""; toggleCardField();
+  $("jobFormTitle").textContent="Yeni İş"; $("saveJobButton").textContent="İşi kaydet"; $("cancelEditButton").classList.add("hidden"); $("existingIncomingDocuments").innerHTML=""; $("existingOutgoingDocuments").innerHTML=""; toggleCardField();
   if(go) navigate("jobs");
 }
 
@@ -512,7 +553,7 @@ async function addCompanyFromForm() {
   if(error)return handleError(error,"Firma eklenemedi");
   state.companies.push(data); state.companies.sort((a,b)=>a.name.localeCompare(b.name,"tr"));
   fillSelect($("companyId"),state.companies,"Firma seç"); fillSelect($("filterCompanyId"),state.companies,"Tüm firmalar");
-  fillSelect($("customerListCompanyFilter"),state.companies,"Tüm firmalar"); renderCustomerPageCompanyChecks();
+  fillSelect($("customerListCompanyFilter"),state.companies,"Tüm firmalar"); fillSelect($("invoiceCompanyId"),state.companies,"Tüm firmalar"); renderCustomerPageCompanyChecks();
   $("companyId").value=data.id; $("newCompanyName").value=""; toast("Firma eklendi.");
 }
 async function addCustomer(name, companyIds=[]) {
@@ -590,17 +631,181 @@ window.removeCustomerCompany=removeCustomerCompany;
 function toggleCardField(){const show=["Kredi Kartı","Sanal Kart"].includes(value("paymentMethod"));$("cardField").classList.toggle("hidden",!show);if(!show)$("paymentCardId").value="";}
 async function fetchRate(currency){try{const response=await fetch(`https://open.er-api.com/v6/latest/${currency}`);const data=await response.json();if(data?.rates?.TRY)$("exchangeRate").value=Number(data.rates.TRY).toFixed(6);else throw new Error();}catch{toast("Kur alınamadı; elle yazabilirsin.","error");}}
 
+function getInvoiceFilters(){
+  return {
+    search:value("invoiceSearch"), kind:value("invoiceKind"), companyId:value("invoiceCompanyId"),
+    jobType:value("invoiceJobType"), dateFrom:value("invoiceDateFrom"), dateTo:value("invoiceDateTo"),
+    dateField:value("invoiceDateField")||"check_in"
+  };
+}
+
+async function fetchInvoiceDocuments(filters={}){
+  const {data,error}=await db.rpc("search_invoice_documents_v1",{
+    p_search:filters.search||"", p_kind:filters.kind||"", p_company_id:filters.companyId||null,
+    p_job_type:filters.jobType||"", p_date_from:filters.dateFrom||null, p_date_to:filters.dateTo||null,
+    p_date_field:filters.dateField||"check_in", p_limit:filters.limit||PAGE_SIZE,
+    p_offset:filters.offset??state.invoicePage*PAGE_SIZE
+  });
+  if(error)throw error;
+  return {items:data||[],total:Number(data?.[0]?.total_count||0)};
+}
+
+async function loadInvoiceArchive(){
+  const target=$("invoiceArchiveList"),filters=getInvoiceFilters();
+  if(filters.dateFrom&&filters.dateTo&&filters.dateFrom>filters.dateTo){
+    target.innerHTML=empty("Başlangıç tarihi bitiş tarihinden sonra olamaz."); return;
+  }
+  target.innerHTML=empty("Faturalar yükleniyor...");
+  try{
+    const [current,incoming,outgoing]=await Promise.all([
+      fetchInvoiceDocuments(filters),
+      fetchInvoiceDocuments({...filters,kind:"incoming",limit:1,offset:0}),
+      fetchInvoiceDocuments({...filters,kind:"outgoing",limit:1,offset:0})
+    ]);
+    state.invoiceTotal=current.total;
+    $("invoiceIncomingCount").textContent=incoming.total.toLocaleString("tr-TR");
+    $("invoiceOutgoingCount").textContent=outgoing.total.toLocaleString("tr-TR");
+    $("invoiceTotalCount").textContent=current.total.toLocaleString("tr-TR");
+    $("invoiceResultSummary").textContent=`${current.total.toLocaleString("tr-TR")} fatura bulundu`;
+    target.innerHTML=current.items.length?current.items.map(invoiceDocumentRow).join(""):empty("Bu filtrelere uygun yüklenmiş fatura bulunamadı.");
+    renderInvoicePagination();
+  }catch(error){
+    target.innerHTML=empty("Faturalar yüklenemedi.");
+    handleError(error,"Fatura arşivi yüklenemedi");
+  }
+}
+
+function invoiceDocumentRow(document){
+  const outgoing=document.kind==="outgoing",kind=outgoing?"outgoing":"incoming";
+  const kindLabel=outgoing?"GİDEN":"GELEN";
+  const uploaded=document.uploaded_at?new Intl.DateTimeFormat("tr-TR",{dateStyle:"short",timeStyle:"short"}).format(new Date(document.uploaded_at)):"-";
+  return `<article class="invoice-document-row">
+    <div class="invoice-type-mark ${kind}">${kindLabel}<br>FATURA</div>
+    <div class="invoice-document-main">
+      <h3 title="${esc(document.original_name)}">${esc(document.original_name)}</h3>
+      <p>${esc(document.company_name)} · ${esc(document.hotel_name)}</p>
+      <div class="invoice-document-meta">
+        <span>Check-in: <b>${dateTR(document.check_in)}</b></span>
+        <span>${esc(document.job_type)}</span>
+        <span>Yüklenme: ${esc(uploaded)}</span>
+        <span>${formatBytes(document.size_bytes)}</span>
+        ${document.customer_names?`<span>Misafir: ${esc(document.customer_names)}</span>`:""}
+      </div>
+    </div>
+    <div class="invoice-document-actions">
+      <button class="secondary" type="button" onclick="openDocument('${document.document_id}')">Aç</button>
+      <button class="primary" type="button" onclick="downloadInvoiceDocument('${document.document_id}')">İndir</button>
+    </div>
+  </article>`;
+}
+
+function formatBytes(bytes){
+  const number=Number(bytes)||0;if(!number)return "Boyut bilinmiyor";
+  if(number<1024)return `${number} B`;if(number<1048576)return `${(number/1024).toFixed(1)} KB`;
+  return `${(number/1048576).toFixed(1)} MB`;
+}
+
+function renderInvoicePagination(){
+  const pages=Math.ceil(state.invoiceTotal/PAGE_SIZE);
+  $("invoicePagination").innerHTML=pages<=1?"":`<button class="secondary" ${state.invoicePage===0?"disabled":""} onclick="changeInvoicePage(-1)">← Önceki</button><span>${state.invoicePage+1} / ${pages}</span><button class="secondary" ${state.invoicePage>=pages-1?"disabled":""} onclick="changeInvoicePage(1)">Sonraki →</button>`;
+}
+window.changeInvoicePage=async delta=>{state.invoicePage+=delta;await loadInvoiceArchive();window.scrollTo({top:0,behavior:"smooth"});};
+
+function setInvoiceThisMonth(){
+  const today=new Date(),year=today.getFullYear(),month=today.getMonth()+1,lastDay=new Date(year,month,0).getDate();
+  $("invoiceDateFrom").value=`${year}-${String(month).padStart(2,"0")}-01`;
+  $("invoiceDateTo").value=`${year}-${String(month).padStart(2,"0")}-${String(lastDay).padStart(2,"0")}`;
+  state.invoicePage=0;loadInvoiceArchive();
+}
+
+function clearInvoiceFilters(){
+  $("invoiceSearch").value="";$("invoiceKind").value="";$("invoiceDateField").value="check_in";
+  $("invoiceDateFrom").value="";$("invoiceDateTo").value="";$("invoiceCompanyId").value="";$("invoiceJobType").value="";
+  $("invoiceKindTabs").querySelectorAll("button").forEach(button=>button.classList.toggle("active",button.dataset.kind===""));
+  $("invoiceDownloadProgress").textContent="";state.invoicePage=0;loadInvoiceArchive();
+}
+
+async function getDocumentBlob(document){
+  if(document.storage_path){
+    const {data,error}=await db.storage.from("invoices").download(document.storage_path);if(error)throw error;return data;
+  }
+  const {data,error}=await db.from("job_documents").select("legacy_data_url").eq("id",document.document_id||document.id).single();
+  if(error)throw error;if(!data?.legacy_data_url)throw new Error("Fatura dosyası bulunamadı");return dataUrlToBlob(data.legacy_data_url);
+}
+
+window.downloadInvoiceDocument=async id=>{
+  try{
+    const {data,error}=await db.from("job_documents").select("id,original_name,storage_path,legacy_data_url").eq("id",id).single();if(error)throw error;
+    const blob=await getDocumentBlob({...data,document_id:data.id});downloadBlob(blob,data.original_name);
+  }catch(error){handleError(error,"Fatura indirilemedi");}
+};
+
+function safeFilePart(text,max=70){return String(text||"").normalize("NFKD").replace(/[^a-zA-Z0-9._-]/g,"_").replace(/_+/g,"_").replace(/^_+|_+$/g,"").slice(0,max)||"Kayit";}
+
+async function downloadFilteredInvoices(){
+  if(!window.JSZip||!window.XLSX)return toast("ZIP/Excel bileşeni yüklenemedi. Sayfayı yenileyip tekrar dene.","error");
+  const button=$("downloadFilteredInvoicesButton"),progress=$("invoiceDownloadProgress"),filters=getInvoiceFilters();
+  if(filters.dateFrom&&filters.dateTo&&filters.dateFrom>filters.dateTo)return toast("Tarih aralığını düzeltmelisin.","error");
+  setBusy(button,true,"Faturalar hazırlanıyor...");
+  try{
+    const first=await fetchInvoiceDocuments({...filters,limit:100,offset:0}),documents=[...first.items];
+    for(let offset=100;offset<first.total;offset+=100){
+      progress.textContent=`Fatura kayıtları alınıyor: ${Math.min(offset,first.total)}/${first.total}`;
+      const page=await fetchInvoiceDocuments({...filters,limit:100,offset});documents.push(...page.items);
+    }
+    if(!documents.length)return toast("İndirilecek fatura bulunamadı.","error");
+    const zip=new JSZip(),failures=[],manifest=[];
+    for(let i=0;i<documents.length;i++){
+      const document=documents[i],outgoing=document.kind==="outgoing";
+      progress.textContent=`Faturalar ekleniyor: ${i+1}/${documents.length} · ${document.original_name}`;
+      let status="İndirildi";
+      try{
+        const blob=await getDocumentBlob(document);
+        const folder=outgoing?"Giden_Faturalar":"Gelen_Faturalar";
+        const name=[document.check_in||"Tarihsiz",safeFilePart(document.company_name,35),safeFilePart(document.hotel_name,45),document.document_id.slice(0,8),safeFilePart(document.original_name,100)].join("_");
+        zip.file(`${folder}/${name}`,blob);
+      }catch(error){status="İndirilemedi";failures.push(`${document.original_name}: ${error?.message||"Bilinmeyen hata"}`);}
+      manifest.push({
+        "Fatura Türü":outgoing?"Giden Fatura":"Gelen Fatura","Firma":document.company_name||"","Otel":document.hotel_name||"",
+        "Misafirler":document.customer_names||"","İş Tipi":document.job_type||"","Check-in":document.check_in||"","Check-out":document.check_out||"",
+        "Fatura Yüklenme Tarihi":document.uploaded_at?new Date(document.uploaded_at).toLocaleString("tr-TR"):"","Dosya Adı":document.original_name||"",
+        "Dosya Boyutu":formatBytes(document.size_bytes),"İndirme Durumu":status,"İş ID":document.job_id,"Belge ID":document.document_id
+      });
+    }
+    const workbook=XLSX.utils.book_new(),sheet=XLSX.utils.json_to_sheet(manifest);
+    sheet["!autofilter"]={ref:sheet["!ref"]};sheet["!cols"]=[22,28,35,35,15,14,14,22,40,16,18,38,38].map(wch=>({wch}));
+    XLSX.utils.book_append_sheet(workbook,sheet,"Fatura Listesi");
+    const companyName=state.companies.find(company=>company.id===filters.companyId)?.name||"Tüm firmalar";
+    const filterSheet=XLSX.utils.aoa_to_sheet([
+      ["Uygulanan Filtre","Değer"],["Fatura türü",filters.kind==="incoming"?"Gelen":filters.kind==="outgoing"?"Giden":"Tümü"],
+      ["Tarih ölçütü",filters.dateField==="uploaded_at"?"Yüklenme tarihi":"İş check-in tarihi"],["Başlangıç",filters.dateFrom||"Tümü"],
+      ["Bitiş",filters.dateTo||"Tümü"],["İş tipi",filters.jobType||"Tümü"],["Firma",companyName],["Arama",filters.search||"Yok"],
+      ["Oluşturulma",new Date().toLocaleString("tr-TR")],["Toplam fatura",documents.length],["Başarısız dosya",failures.length]
+    ]);filterSheet["!cols"]=[{wch:24},{wch:42}];XLSX.utils.book_append_sheet(workbook,filterSheet,"Filtreler");
+    zip.file("Fatura_Listesi.xlsx",XLSX.write(workbook,{bookType:"xlsx",type:"array"}));
+    if(failures.length)zip.file("Indirilemeyen_Faturalar.txt",failures.join("\n"));
+    progress.textContent="ZIP dosyası oluşturuluyor...";
+    const result=await zip.generateAsync({type:"blob",compression:"DEFLATE",compressionOptions:{level:6}},metadata=>{progress.textContent=`ZIP oluşturuluyor: %${Math.round(metadata.percent)}`;});
+    const typeName=filters.kind==="incoming"?"Gelen":filters.kind==="outgoing"?"Giden":"Tum";
+    const jobTypeName=filters.jobType==="YURT İÇİ"?"Yurtici":filters.jobType==="YURT DIŞI"?"Yurtdisi":"Tum_Isler";
+    const dateName=filters.dateFrom||filters.dateTo?`${filters.dateFrom||"Baslangic"}_${filters.dateTo||"Bugun"}`:"Tum_Tarihler";
+    downloadBlob(result,`MIA_Faturalar_${typeName}_${jobTypeName}_${dateName}.zip`);
+    progress.textContent=`${documents.length-failures.length}/${documents.length} fatura ZIP dosyasına eklendi.`;
+    toast(failures.length?`ZIP hazır; ${failures.length} dosya indirilemedi.`:`${documents.length} fatura ZIP olarak indirildi.`,failures.length?"error":"success");
+  }catch(error){handleError(error,"Faturalar indirilemedi");}
+  finally{setBusy(button,false);}
+}
+
 async function loadSpecialJobs(kind){
-  const target=kind==="invoices"?$("invoiceJobs"):$("paymentJobs");target.innerHTML=empty("Yükleniyor...");
-  try{let jobs=[];
-    if(kind==="payments") jobs=(await fetchJobs({payment:"Bekliyor",limit:100})).items.concat((await fetchJobs({payment:"Kısmi",limit:100})).items);
-    else {const a=(await fetchJobs({hotelInvoice:"Bekliyor",limit:100})).items;const b=(await fetchJobs({customerInvoice:"Kesilmedi",limit:100})).items;jobs=[...new Map([...a,...b].map(j=>[j.id,j])).values()];}
-    target.innerHTML=jobs.length?jobs.map(jobCard).join(""):empty(kind==="invoices"?"Bekleyen fatura yok.":"Bekleyen ödeme yok.");
+  const target=$("paymentJobs");target.innerHTML=empty("Yükleniyor...");
+  try{
+    const jobs=(await fetchJobs({payment:"Bekliyor",limit:100})).items.concat((await fetchJobs({payment:"Kısmi",limit:100})).items);
+    target.innerHTML=jobs.length?jobs.map(jobCard).join(""):empty("Bekleyen ödeme yok.");
   }catch(e){handleError(e,"Kayıtlar yüklenemedi");}
 }
 
 async function loadReports(){const {data,error}=await db.rpc("company_report");if(error)return handleError(error,"Rapor yüklenemedi");state.reportCompanies=Object.fromEntries((data||[]).map(r=>[r.company_id,r.company_name]));$("companyReports").innerHTML=(data||[]).map(r=>`<div class="report-card"><h3>${esc(r.company_name)}</h3><div class="report-numbers"><div><span>İş</span><b>${r.job_count}</b></div><div><span>Satış</span><b>${moneyTry(r.sale_try)}</b></div><div><span>Kâr</span><b>${moneyTry(r.profit_try)}</b></div></div><button class="secondary" onclick="downloadCompanyCsv('${r.company_id}')">CSV indir</button></div>`).join("")||empty("Raporlanacak veri yok.");}
-window.downloadCompanyCsv=async id=>{try{const name=state.reportCompanies[id]||"Firma";const rows=await getAllRows("jobs","*",q=>q.eq("company_id",id).is("deleted_at",null));const headers=["Otel","Check-in","Check-out","Oda","Maliyet","Satış","Para","Ödeme","Otel Faturası","Müşteri Faturası","Notlar"];const lines=[headers,...rows.map(j=>[j.hotel_name,j.check_in,j.check_out,j.room_count,j.cost,j.sale,j.currency,j.payment_status,j.hotel_invoice_status,j.customer_invoice_status,j.notes||""])];downloadBlob(new Blob(["\uFEFF"+lines.map(row=>row.map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(";")).join("\n")],{type:"text/csv;charset=utf-8"}),`${name.replace(/[^a-z0-9]/gi,"_")}_hizmet_dokumu.csv`);}catch(e){handleError(e,"CSV oluşturulamadı");}};
+window.downloadCompanyCsv=async id=>{try{const name=state.reportCompanies[id]||"Firma";const rows=await getAllRows("jobs","*",q=>q.eq("company_id",id).is("deleted_at",null));const headers=["Otel","Check-in","Check-out","Oda","Maliyet","Satış","Para","Ödeme","Gelen Fatura Durumu","Giden Fatura Durumu","Notlar"];const lines=[headers,...rows.map(j=>[j.hotel_name,j.check_in,j.check_out,j.room_count,j.cost,j.sale,j.currency,j.payment_status,j.hotel_invoice_status,j.customer_invoice_status,j.notes||""])];downloadBlob(new Blob(["\uFEFF"+lines.map(row=>row.map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(";")).join("\n")],{type:"text/csv;charset=utf-8"}),`${name.replace(/[^a-z0-9]/gi,"_")}_hizmet_dokumu.csv`);}catch(e){handleError(e,"CSV oluşturulamadı");}};
 
 async function loadTrash(){try{const r=await fetchJobs({onlyDeleted:true,limit:100});$("trashJobs").innerHTML=r.items.length?r.items.map(jobCard).join(""):empty("Çöp kutusu boş.");}catch(e){handleError(e,"Çöp kutusu yüklenemedi");}}
 
@@ -609,7 +814,7 @@ async function migrateLegacyDocuments(){const button=$("migrateDocumentsButton")
 function dataUrlToBlob(dataUrl){const [head,body]=dataUrl.split(",");const mime=head.match(/data:(.*?);/)?.[1]||"application/octet-stream";const bytes=atob(body);const arr=new Uint8Array(bytes.length);for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);return new Blob([arr],{type:mime});}
 
 async function getAllRows(table,columns="*",modify=q=>q){let out=[];for(let from=0;;from+=1000){let query=db.from(table).select(columns).range(from,from+999);query=modify(query);const {data,error}=await query;if(error)throw error;out.push(...data);if(data.length<1000)break;}return out;}
-async function downloadFullBackup(){if(!window.JSZip)return toast("Yedekleme bileşeni yüklenemedi.","error");const button=$("downloadBackupButton");setBusy(button,true,"Yedek hazırlanıyor...");try{const progress=$("backupProgress");progress.textContent="Veritabanı kayıtları alınıyor...";const tables=["companies","customers","customer_companies","payment_cards","jobs","job_customers","job_documents","audit_logs","app_settings"];const backup={version:3,created_at:new Date().toISOString(),tables:{}};for(const table of tables){backup.tables[table]=await getAllRows(table,table==="job_documents"?"id,job_id,kind,original_name,storage_path,mime_type,size_bytes,uploaded_by,created_at,deleted_at":"*");}const zip=new JSZip();zip.file("veritabani-yedegi.json",JSON.stringify(backup,null,2));const docs=backup.tables.job_documents.filter(d=>!d.deleted_at);for(let i=0;i<docs.length;i++){const d=docs[i];progress.textContent=`Faturalar ekleniyor: ${i+1}/${docs.length}`;let blob;if(d.storage_path){const {data,error}=await db.storage.from("invoices").download(d.storage_path);if(error)throw error;blob=data;}else{const {data,error}=await db.from("job_documents").select("legacy_data_url").eq("id",d.id).single();if(error)throw error;blob=dataUrlToBlob(data.legacy_data_url);}zip.file(`faturalar/${d.job_id}/${d.original_name}`,blob);}progress.textContent="ZIP dosyası oluşturuluyor...";const result=await zip.generateAsync({type:"blob",compression:"DEFLATE",compressionOptions:{level:6}});downloadBlob(result,`MIA_Otel_Sistem_Yedek_${new Date().toISOString().slice(0,10)}.zip`);progress.textContent="Yedek başarıyla indirildi.";toast("Tam sistem yedeği hazırlandı.");}catch(e){handleError(e,"Yedek oluşturulamadı");}finally{setBusy(button,false);}}
+async function downloadFullBackup(){if(!window.JSZip)return toast("Yedekleme bileşeni yüklenemedi.","error");const button=$("downloadBackupButton");setBusy(button,true,"Yedek hazırlanıyor...");try{const progress=$("backupProgress");progress.textContent="Veritabanı kayıtları alınıyor...";const tables=["companies","customers","customer_companies","payment_cards","jobs","job_customers","job_documents","audit_logs","app_settings"];const backup={version:4,created_at:new Date().toISOString(),tables:{}};for(const table of tables){backup.tables[table]=await getAllRows(table,table==="job_documents"?"id,job_id,kind,original_name,storage_path,mime_type,size_bytes,uploaded_by,created_at,deleted_at":"*");}const zip=new JSZip();zip.file("veritabani-yedegi.json",JSON.stringify(backup,null,2));const docs=backup.tables.job_documents.filter(d=>!d.deleted_at);for(let i=0;i<docs.length;i++){const d=docs[i];progress.textContent=`Faturalar ekleniyor: ${i+1}/${docs.length}`;let blob;if(d.storage_path){const {data,error}=await db.storage.from("invoices").download(d.storage_path);if(error)throw error;blob=data;}else{const {data,error}=await db.from("job_documents").select("legacy_data_url").eq("id",d.id).single();if(error)throw error;blob=dataUrlToBlob(data.legacy_data_url);}const folder=d.kind==="outgoing"?"Giden_Faturalar":"Gelen_Faturalar";zip.file(`faturalar/${folder}/${d.job_id}/${d.original_name}`,blob);}progress.textContent="ZIP dosyası oluşturuluyor...";const result=await zip.generateAsync({type:"blob",compression:"DEFLATE",compressionOptions:{level:6}});downloadBlob(result,`MIA_Otel_Sistem_Yedek_${new Date().toISOString().slice(0,10)}.zip`);progress.textContent="Yedek başarıyla indirildi.";toast("Tam sistem yedeği hazırlandı.");}catch(e){handleError(e,"Yedek oluşturulamadı");}finally{setBusy(button,false);}}
 function downloadBlob(blob,name){const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 
 function handleError(error, fallback) { console.error(error); toast(`${fallback}: ${error?.message || "Bilinmeyen hata"}`, "error"); }

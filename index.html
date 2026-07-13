@@ -94,11 +94,21 @@
           <label>Kur<input id="exchangeRate" type="number" min="0.000001" step="0.000001" value="1"></label>
           <label>Ödeme yöntemi<select id="paymentMethod"><option>Havale</option><option>Kredi Kartı</option><option>Sanal Kart</option><option>Nakit</option><option>Cari</option></select></label>
           <label id="cardField" class="hidden">Kart<select id="paymentCardId"></select><span class="inline-mini"><input id="newCardName" placeholder="Yeni kart adı / son 4 hane"><button id="addCardButton" type="button" class="secondary">Ekle</button></span></label>
-          <label>Otel faturası<select id="hotelInvoiceStatus"><option>Bekliyor</option><option>Geldi</option><option>Gerek Yok</option></select></label>
-          <label>Müşteri faturası<select id="customerInvoiceStatus"><option>Kesilmedi</option><option>Kesildi</option></select></label>
+          <label>Gelen fatura durumu (otel)<select id="hotelInvoiceStatus"><option>Bekliyor</option><option>Geldi</option><option>Gerek Yok</option></select></label>
+          <label>Giden fatura durumu (bizim kestiğimiz)<select id="customerInvoiceStatus"><option>Kesilmedi</option><option>Kesildi</option></select></label>
           <label>Ödeme<select id="paymentStatus"><option>Bekliyor</option><option>Alındı</option><option>Kısmi</option></select></label>
-          <label class="span-2">Fatura PDF / Görsel (en fazla 20 MB)<input id="invoiceFiles" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple></label>
-          <div id="existingDocuments" class="span-2 document-list"></div>
+          <div class="span-2 invoice-upload-grid">
+            <section class="invoice-upload-card incoming">
+              <div><span class="invoice-direction">GELEN FATURA</span><h3>Otelin bize kestiği fatura</h3><p>Otelden gelen alış/giriş faturalarının PDF veya görsellerini ekle.</p></div>
+              <label>Dosya seç (dosya başına en fazla 20 MB)<input id="incomingInvoiceFiles" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple></label>
+              <div id="existingIncomingDocuments" class="document-list"></div>
+            </section>
+            <section class="invoice-upload-card outgoing">
+              <div><span class="invoice-direction">GİDEN FATURA</span><h3>Bizim karşı tarafa kestiğimiz fatura</h3><p>Bu iş için düzenlediğimiz satış/çıkış faturalarının PDF veya görsellerini ekle.</p></div>
+              <label>Dosya seç (dosya başına en fazla 20 MB)<input id="outgoingInvoiceFiles" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple></label>
+              <div id="existingOutgoingDocuments" class="document-list"></div>
+            </section>
+          </div>
           <label class="span-2">Ekstralar<textarea id="extras"></textarea></label>
           <label class="span-2">Notlar<textarea id="notes"></textarea></label>
           <div class="span-2 form-actions"><button id="saveJobButton" class="primary" type="submit">İşi kaydet</button><button id="cancelEditButton" class="secondary hidden" type="button">Vazgeç</button></div>
@@ -116,8 +126,8 @@
             <label>Check-in bitiş<input id="filterDateTo" type="date"></label>
             <label>Para birimi<select id="filterCurrency"><option value="">Tümü</option><option>TL</option><option>EUR</option><option>USD</option></select></label>
             <label>Ödeme yöntemi<select id="filterPaymentMethod"><option value="">Tümü</option><option>Havale</option><option>Kredi Kartı</option><option>Sanal Kart</option><option>Nakit</option><option>Cari</option></select></label>
-            <label>Otel faturası<select id="filterHotelInvoice"><option value="">Tümü</option><option>Bekliyor</option><option>Geldi</option><option>Gerek Yok</option></select></label>
-            <label>Müşteri faturası<select id="filterCustomerInvoice"><option value="">Tümü</option><option>Kesilmedi</option><option>Kesildi</option></select></label>
+            <label>Gelen fatura durumu<select id="filterHotelInvoice"><option value="">Tümü</option><option>Bekliyor</option><option>Geldi</option><option>Gerek Yok</option></select></label>
+            <label>Giden fatura durumu<select id="filterCustomerInvoice"><option value="">Tümü</option><option>Kesilmedi</option><option>Kesildi</option></select></label>
             <label>Ödeme durumu<select id="filterPayment"><option value="">Tümü</option><option>Bekliyor</option><option>Alındı</option><option>Kısmi</option></select></label>
             <label>Sıralama<select id="filterSort"><option value="created_desc">En son eklenen</option><option value="checkin_asc">Yaklaşan check-in</option><option value="checkin_desc">Check-in: yeniden eskiye</option><option value="sale_desc">En yüksek satış</option><option value="profit_desc">En yüksek kâr</option></select></label>
           </div>
@@ -146,7 +156,39 @@
       </section>
 
       <section id="page-invoices" class="page">
-        <div class="page-head"><div><p class="eyebrow">TAKİP</p><h1>Bekleyen Faturalar</h1></div></div><div id="invoiceJobs"></div>
+        <div class="page-head"><div><p class="eyebrow">GELEN / GİDEN BELGELER</p><h1>Fatura Arşivi</h1><p class="muted">Otelden gelen faturaları ve bizim kestiğimiz faturaları tek yerden bul, aç ve toplu indir.</p></div></div>
+        <div class="invoice-stat-grid">
+          <div class="invoice-stat incoming"><span>Gelen fatura</span><strong id="invoiceIncomingCount">0</strong><small>Otellerden gelen</small></div>
+          <div class="invoice-stat outgoing"><span>Giden fatura</span><strong id="invoiceOutgoingCount">0</strong><small>Bizim kestiklerimiz</small></div>
+          <div class="invoice-stat total"><span>Filtrelenen toplam</span><strong id="invoiceTotalCount">0</strong><small>Dosya</small></div>
+        </div>
+        <div class="panel invoice-filter-panel">
+          <input id="invoiceKind" type="hidden" value="">
+          <div id="invoiceKindTabs" class="invoice-kind-tabs">
+            <button type="button" class="active" data-kind="">Tüm faturalar</button>
+            <button type="button" data-kind="incoming">Gelen faturalar</button>
+            <button type="button" data-kind="outgoing">Giden faturalar</button>
+          </div>
+          <div class="invoice-filter-grid">
+            <label class="invoice-search">Ara<input id="invoiceSearch" type="search" placeholder="Firma, otel, misafir veya dosya adı..."></label>
+            <label>Tarih ölçütü<select id="invoiceDateField"><option value="check_in">İşin check-in tarihi</option><option value="uploaded_at">Faturanın yüklenme tarihi</option></select></label>
+            <label>Başlangıç<input id="invoiceDateFrom" type="date"></label>
+            <label>Bitiş<input id="invoiceDateTo" type="date"></label>
+            <label>Firma<select id="invoiceCompanyId"><option value="">Tüm firmalar</option></select></label>
+            <label>İş tipi<select id="invoiceJobType"><option value="">Yurtiçi + Yurtdışı</option><option>YURT İÇİ</option><option>YURT DIŞI</option></select></label>
+          </div>
+          <div class="invoice-filter-actions">
+            <strong id="invoiceResultSummary">0 fatura bulundu</strong>
+            <div>
+              <button id="invoiceThisMonthButton" class="secondary" type="button">Bu ay</button>
+              <button id="clearInvoiceFiltersButton" class="secondary" type="button">Filtreleri temizle</button>
+              <button id="downloadFilteredInvoicesButton" class="primary" type="button">Filtrelenen faturaları ZIP indir</button>
+            </div>
+          </div>
+          <p id="invoiceDownloadProgress" class="muted"></p>
+        </div>
+        <div id="invoiceArchiveList" class="invoice-archive-list"></div>
+        <div id="invoicePagination" class="pagination"></div>
       </section>
       <section id="page-payments" class="page">
         <div class="page-head"><div><p class="eyebrow">TAKİP</p><h1>Bekleyen Ödemeler</h1></div></div><div id="paymentJobs"></div>
