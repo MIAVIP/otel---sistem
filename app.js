@@ -195,7 +195,10 @@ function getCustomerCompanyNames(customerId) {
 
 function renderCustomerPageCompanyChecks() {
   $("customerPageCompanyChecks").innerHTML = state.companies.map(company => `
-    <label class="company-check"><input type="checkbox" value="${company.id}"> ${esc(company.name)}</label>`).join("");
+    <div class="company-check">
+      <label><input type="checkbox" value="${company.id}"><span>${esc(company.name)}</span></label>
+      <button class="company-delete-button" type="button" title="Firmayı sil" aria-label="${esc(company.name)} firmasını sil" onclick="archiveCompany('${company.id}')">Sil</button>
+    </div>`).join("");
 }
 
 function renderCustomerSearchResults() {
@@ -320,8 +323,9 @@ function jobCard(job, options={}) {
   const names = (job.customers||[]).map(c=>c.name).join(", ") || "-";
   const profit = (Number(job.sale)-Number(job.cost));
   const deleted = !!job.deleted_at;
+  const saleMissing = Number(job.sale) === 0;
   return `<article class="job-card">
-    <div class="job-top"><div class="job-title"><h3>${esc(job.hotel_name)}</h3><p>${esc(job.company_name)} · ${esc(names)}</p></div><div class="job-sale"><span>Satış</span><strong>${money(job.sale,job.currency)}</strong></div></div>
+    <div class="job-top"><div class="job-title"><h3>${esc(job.hotel_name)}</h3><p>${esc(job.company_name)} · ${esc(names)}</p></div><div class="job-sale ${saleMissing?"sale-missing":""}" ${saleMissing?'title="Satış tutarı girilmemiş"':""}><span>Satış${saleMissing?" · Girilmedi":""}</span><strong>${money(job.sale,job.currency)}</strong></div></div>
     <div class="badges">
       ${badge(`Gelen Fatura: ${job.hotel_invoice_status}`,job.hotel_invoice_status!=="Bekliyor")}
       ${badge(`Giden Fatura: ${job.customer_invoice_status}`,job.customer_invoice_status==="Kesildi")}
@@ -332,12 +336,12 @@ function jobCard(job, options={}) {
       <div><span>Tarih</span><b>${dateTR(job.check_in)} – ${dateTR(job.check_out)}</b></div>
       <div><span>Oda</span><b>${esc(job.room_count)} · ${esc(job.room_type||"-")}</b></div>
       <div><span>Maliyet</span><b>${money(job.cost,job.currency)}</b></div>
-      <div><span>Satış</span><b>${money(job.sale,job.currency)}</b></div>
+      <div class="${saleMissing?"sale-missing":""}" ${saleMissing?'title="Satış tutarı girilmemiş"':""}><span>Satış${saleMissing?" · Girilmedi":""}</span><b>${money(job.sale,job.currency)}</b></div>
       <div><span>Kâr</span><b>${money(profit,job.currency)}</b></div>
     </div>
     <div class="job-actions">
       ${(job.documents||[]).map((d,index)=>`<button class="secondary" title="${esc(d.original_name)}" onclick="openDocument('${d.id}')">${d.kind==="outgoing"?"Giden":"Gelen"} fatura${job.documents.length>1?` ${index+1}`:""}</button>`).join("")}
-      ${deleted ? `<button class="primary" onclick="restoreJob('${job.id}',${job.version})">Geri yükle</button>` : `<button class="secondary" onclick="editJob('${job.id}')">Düzenle</button><button class="danger" onclick="deleteJob('${job.id}',${job.version})">Çöpe taşı</button>`}
+      ${deleted ? `<button class="primary" onclick="restoreJob('${job.id}',${job.version})">Geri yükle</button><button class="danger" onclick="permanentlyDeleteJob('${job.id}',${job.version},this)">Kalıcı sil</button>` : `<button class="secondary" onclick="editJob('${job.id}')">Düzenle</button><button class="danger" onclick="deleteJob('${job.id}',${job.version})">Çöpe taşı</button>`}
     </div>
   </article>`;
 }
@@ -543,6 +547,39 @@ window.restoreJob = async (id,version) => {
   toast("İş geri yüklendi."); await loadTrash();
 };
 
+async function removeStorageObjects(paths){
+  const failures=[];
+  for(let index=0;index<paths.length;index+=100){
+    const batch=paths.slice(index,index+100);
+    let lastError=null;
+    for(let attempt=0;attempt<3;attempt++){
+      const {error}=await db.storage.from("invoices").remove(batch);
+      lastError=error||null;
+      if(!lastError)break;
+      await sleep(350*(attempt+1));
+    }
+    if(lastError){console.error("Storage cleanup failed",lastError);failures.push(...batch);}
+  }
+  return failures;
+}
+
+window.permanentlyDeleteJob = async (id,version,button) => {
+  if(!confirm("Bu iş kalıcı olarak silinsin mi? İş kaydı, müşteri bağlantıları ve faturaları geri alınamaz."))return;
+  if(!confirm("SON ONAY: Bu işlem geri alınamaz. Kalıcı silmeye devam edilsin mi?"))return;
+  setBusy(button,true,"Kalıcı siliniyor...");
+  try{
+    const {data,error}=await db.rpc("purge_trashed_job_v1",{p_job_id:id,p_expected_version:version});
+    if(error)throw error;
+    if(!data?.ok)return toast(data?.message||"İş kalıcı olarak silinemedi.","error");
+    const paths=Array.isArray(data.storage_paths)?data.storage_paths.filter(Boolean):[];
+    const failures=await removeStorageObjects(paths);
+    await loadTrash();
+    if(failures.length)toast(`İş kalıcı silindi; ${failures.length} fatura dosyası temizlenirken uyarı oluştu.`,"error");
+    else toast("İş ve bağlı fatura dosyaları kalıcı olarak silindi.");
+  }catch(error){handleError(error,"İş kalıcı olarak silinemedi");}
+  finally{setBusy(button,false);}
+};
+
 window.openDocument = async id => {
   const tab=window.open("about:blank","_blank");
   try {
@@ -615,7 +652,34 @@ function renderCustomerRecord(customer){
   const linkedIds=new Set(getCustomerCompanyIds(customer.id));
   const linked=state.companies.filter(company=>linkedIds.has(company.id));
   const available=state.companies.filter(company=>!linkedIds.has(company.id));
-  return `<div class="customer-record"><div class="customer-record-main"><div><h4>${esc(customer.name)}</h4><div class="company-tags">${linked.length?linked.map(company=>`<span class="company-tag">${esc(company.name)}<button type="button" title="Firma bağlantısını kaldır" onclick="removeCustomerCompany('${customer.id}','${company.id}')">×</button></span>`).join(""):'<span class="muted">Firma atanmamış</span>'}</div></div>${available.length?`<div class="customer-company-editor"><select>${available.map(company=>`<option value="${company.id}">${esc(company.name)}</option>`).join("")}</select><button class="secondary" type="button" onclick="addCustomerCompany('${customer.id}', this.previousElementSibling.value)">Firma ekle</button></div>`:'<span class="muted">Tüm firmalara bağlı</span>'}</div></div>`;
+  const companyEditor=available.length?`<div class="customer-company-editor"><select>${available.map(company=>`<option value="${company.id}">${esc(company.name)}</option>`).join("")}</select><button class="secondary" type="button" onclick="addCustomerCompany('${customer.id}', this.previousElementSibling.value)">Firma ekle</button></div>`:'<span class="muted">Tüm firmalara bağlı</span>';
+  return `<div class="customer-record"><div class="customer-record-main"><div><h4>${esc(customer.name)}</h4><div class="company-tags">${linked.length?linked.map(company=>`<span class="company-tag">${esc(company.name)}<button type="button" title="Firma bağlantısını kaldır" onclick="removeCustomerCompany('${customer.id}','${company.id}')">×</button></span>`).join(""):'<span class="muted">Firma atanmamış</span>'}</div></div><div class="customer-record-actions">${companyEditor}<button class="danger customer-delete-button" type="button" onclick="archiveCustomer('${customer.id}')">Müşteriyi sil</button></div></div></div>`;
+}
+
+function linkedRecordMessage(result, label){
+  const active=Number(result?.active_job_count)||0, trashed=Number(result?.trashed_job_count)||0, total=Number(result?.job_count)||0;
+  const detail=[active?`${active} aktif`:"",trashed?`${trashed} çöp kutusunda`:""].filter(Boolean).join(", ");
+  return `${label} silinmedi: ${total} işe bağlı${detail?` (${detail})`:""}. Önce ilgili iş kayıtlarındaki bağlantıyı değiştir.`;
+}
+
+async function archiveCompany(companyId){
+  const company=state.companies.find(item=>item.id===companyId); if(!company)return;
+  if(!confirm(`"${company.name}" firması silinsin mi?\n\nMüşteriler silinmez; yalnızca bu firmayla bağlantıları kaldırılır.`))return;
+  try{
+    const {data,error}=await db.rpc("archive_company_v1",{p_company_id:companyId}); if(error)throw error;
+    if(!data?.ok)return toast(data?.code==="IN_USE"?linkedRecordMessage(data,"Firma"):(data?.message||"Firma silinemedi."),"error");
+    await loadLookups(); renderCustomers(); toast(`${company.name} firması silindi.`);
+  }catch(error){handleError(error,"Firma silinemedi");}
+}
+
+async function archiveCustomer(customerId){
+  const customer=state.customers.find(item=>item.id===customerId); if(!customer)return;
+  if(!confirm(`"${customer.name}" adlı müşteri silinsin mi?\n\nBağlı olduğu tüm firma bağlantıları da kaldırılır.`))return;
+  try{
+    const {data,error}=await db.rpc("archive_customer_v1",{p_customer_id:customerId}); if(error)throw error;
+    if(!data?.ok)return toast(data?.code==="IN_USE"?linkedRecordMessage(data,"Müşteri"):(data?.message||"Müşteri silinemedi."),"error");
+    await loadLookups(); renderCustomers(); toast(`${customer.name} adlı müşteri silindi.`);
+  }catch(error){handleError(error,"Müşteri silinemedi");}
 }
 
 async function addCustomerCompany(customerId,companyId){
@@ -633,6 +697,8 @@ async function removeCustomerCompany(customerId,companyId){
 }
 window.addCustomerCompany=addCustomerCompany;
 window.removeCustomerCompany=removeCustomerCompany;
+window.archiveCompany=archiveCompany;
+window.archiveCustomer=archiveCustomer;
 
 function toggleCardField(){const show=["Kredi Kartı","Sanal Kart"].includes(value("paymentMethod"));$("cardField").classList.toggle("hidden",!show);if(!show)$("paymentCardId").value="";}
 async function fetchRate(currency){try{const response=await fetch(`https://open.er-api.com/v6/latest/${currency}`);const data=await response.json();if(data?.rates?.TRY)$("exchangeRate").value=Number(data.rates.TRY).toFixed(6);else throw new Error();}catch{toast("Kur alınamadı; elle yazabilirsin.","error");}}
