@@ -1,950 +1,211 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="tr">
 <head>
-<meta charset="UTF-8">
-<title>Otel İş Takip</title>
-<style>
-body{font-family:Arial,sans-serif;margin:0;background:#f5f6fa;color:#111}
-.topbar{background:#111;color:white;padding:14px 24px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-.topbar button{background:#2b2b2b;color:white;border:1px solid #444;padding:10px 14px;border-radius:8px;cursor:pointer}
-.topbar button.active{background:white;color:#111}
-.container{padding:25px}
-.dashboard{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:25px}
-.box,.form,.card{background:white;padding:18px;border-radius:12px;border:1px solid #ddd;margin-bottom:18px}
-.box{min-width:170px}
-.box b{display:block;font-size:14px;color:#555}
-.box span{font-size:22px;font-weight:bold}
-input,button,select,textarea{padding:10px;margin:6px;border:1px solid #aaa;border-radius:6px;font-size:15px}
-textarea{width:92%;min-height:65px}
-button{cursor:pointer;background:#222;color:white}
-.btn-edit{background:#0066cc}
-.btn-delete{background:#8b0000}
-.btn-file{background:#0a7c35}
-.small{color:#666;font-size:14px}
-.kar{font-weight:bold;font-size:18px}
-.section{display:none}
-.section.active{display:block}
-.customer-pill{display:inline-block;background:#eee;padding:7px 10px;margin:5px;border-radius:20px}
-.customer-result{background:#f1f1f1;padding:8px;margin:5px;border-radius:7px;cursor:pointer}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>MIA VIP | Otel İş Takip</title>
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script type="module" src="/app.js"></script>
 </head>
-
 <body>
-
-<div class="topbar">
-    <button onclick="sekmeAc('ana')" class="active">Ana Sayfa</button>
-    <button onclick="sekmeAc('yeni')">Yeni İş</button>
-    <button onclick="sekmeAc('isler')">İşler</button>
-    <button onclick="sekmeAc('musteriler')">Müşteriler</button>
-    <button onclick="sekmeAc('faturalar')">Faturalar</button>
-    <button onclick="sekmeAc('odemeler')">Ödemeler</button>
-    <button onclick="sekmeAc('rapor')">Raporlama</button>
-</div>
-
-<img src="logo.png" style="position: fixed; top: 15px; right: 20px; height: 45px; z-index: 999;">
-
-<div class="container">
-
-<section id="ana" class="section active">
-<h2>Dashboard</h2>
-
-<div class="dashboard">
-    <div class="box"><b>Toplam İş</b><span id="toplamIs">0</span></div>
-    <div class="box"><b>Toplam Maliyet TL</b><span id="toplamMaliyet">0 TL</span></div>
-    <div class="box"><b>Toplam Satış TL</b><span id="toplamSatis">0 TL</span></div>
-    <div class="box"><b>Toplam Kâr TL</b><span id="toplamKar">0 TL</span></div>
-    <div class="box"><b>Kâr Oranı</b><span id="karOrani">0%</span></div>
-    <div class="box"><b>Bekleyen Otel Faturası</b><span id="bekleyenFatura">0</span></div>
-    <div class="box"><b>Kesilmeyen Müşteri Faturası</b><span id="kesilmeyenFatura">0</span></div>
-    <div class="box"><b>Ödeme Bekleyen</b><span id="odemeBekleyen">0</span></div>
-</div>
-</section>
-
-<section id="yeni" class="section">
-<div class="form">
-<h2 id="formBaslik">Yeni İş Ekle</h2>
-
-<input id="firma" placeholder="Firma ara veya yaz..." oninput="firmaAra()">
-<button onclick="firmaKaydet()">Firmayı Kaydet</button>
-<div id="firmaSonuclari"></div>
-<input id="otel" placeholder="Otel">
-<input id="oda" type="number" placeholder="Oda Sayısı">
-<input id="odaTipi" placeholder="Oda Tipi">
-
-<br>
-
-<label>Check-in:</label>
-<input id="checkin" type="date">
-<label>Check-out:</label>
-<input id="checkout" type="date">
-
-<br>
-
-<h3>Müşteri / Misafir Seç</h3>
-<input id="musteriAra" placeholder="Müşteri ara veya yeni isim yaz..." oninput="musteriAra()">
-<button onclick="musteriKaydetVeEkle()">Yeni Müşteri Kaydet + İşe Ekle</button>
-<div id="musteriSonuclari"></div>
-<div id="secilenMusteriler"></div>
-
-<br>
-
-<input id="talepEden" placeholder="Talep Kimden Geldi?">
-
-<select id="talepKanali">
-    <option value="WhatsApp">WhatsApp</option>
-    <option value="Mail">Mail</option>
-    <option value="Telefon">Telefon</option>
-    <option value="Diğer">Diğer</option>
-</select>
-
-<br>
-
-<select id="isTipi">
-    <option value="YURT İÇİ">YURT İÇİ</option>
-    <option value="YURT DIŞI">YURT DIŞI</option>
-</select>
-
-<input id="maliyet" type="number" placeholder="Maliyet KDV Dahil">
-<input id="satis" type="number" placeholder="Satış KDV Dahil">
-
-<select id="para" onchange="kurGetir()">
-    <option value="TL">TL</option>
-    <option value="EUR">EURO</option>
-    <option value="USD">DOLAR</option>
-</select>
-
-<input id="kur" type="number" placeholder="Kur" value="1">
-
-<br>
-
-  <select id="odemeYontemi" onchange="kartAlaniKontrol()">
-    <option value="Havale">Havale</option>
-    <option value="Kredi Kartı">Kredi Kartı</option>
-    <option value="Sanal Kart">Sanal Kart</option>
-    <option value="Nakit">Nakit</option>
-    <option value="Cari">Cari / Sonradan Ödeme</option>
-</select>
-
-<div id="kartAlani" style="display:none;">
-    <select id="kartSec">
-        <option value="">Kart seç</option>
-    </select>
-
-    <input id="yeniKart" placeholder="Yeni kart adı / son 4 hane">
-
-    <button type="button" onclick="kartKaydet()">Kartı Kaydet</button>
-</div>
-
-<select id="otelFatura">
-    <option value="Bekliyor">Otel Faturası Bekliyor</option>
-    <option value="Geldi">Otel Faturası Geldi</option>
-    <option value="Gerek Yok">Otel Faturası Gerek Yok</option>
-</select>
-
-<select id="musteriFatura">
-    <option value="Kesilmedi">Müşteri Faturası Kesilmedi</option>
-    <option value="Kesildi">Müşteri Faturası Kesildi</option>
-</select>
-
-<select id="odeme">
-    <option value="Bekliyor">Ödeme Bekliyor</option>
-    <option value="Alındı">Ödeme Alındı</option>
-    <option value="Kısmi">Kısmi Ödeme</option>
-</select>
-
-<br>
-
-<label>Fatura PDF / Görsel:</label>
-<input id="faturaDosya" type="file" accept=".pdf,image/*">
-
-<br>
-
-<textarea id="ekstralar" placeholder="Ekstralar"></textarea>
-<br>
-<textarea id="notlar" placeholder="Notlar"></textarea>
-
-<br>
-<button id="anaButon" onclick="ekle()">İşi Ekle</button>
-<button onclick="formTemizle()">Formu Temizle</button>
-</div>
-</section>
-
-<section id="isler" class="section">
-<h2>İşler</h2>
-
-<div class="form">
-<input id="arama" placeholder="Firma, otel, müşteri, not ara..." oninput="listele()">
-
-<select id="filtreOtelFatura" onchange="listele()">
-<option value="">Otel Faturası: Tümü</option>
-<option value="Bekliyor">Bekliyor</option>
-<option value="Geldi">Geldi</option>
-<option value="Gerek Yok">Gerek Yok</option>
-</select>
-
-<select id="filtreMusteriFatura" onchange="listele()">
-<option value="">Müşteri Faturası: Tümü</option>
-<option value="Kesilmedi">Kesilmedi</option>
-<option value="Kesildi">Kesildi</option>
-</select>
-
-<select id="filtreOdeme" onchange="listele()">
-<option value="">Ödeme: Tümü</option>
-<option value="Bekliyor">Bekliyor</option>
-<option value="Alındı">Alındı</option>
-<option value="Kısmi">Kısmi</option>
-</select>
-
-<button onclick="filtreTemizle()">Filtreleri Temizle</button>
-</div>
-
-<div id="liste"></div>
-</section>
-
-<section id="musteriler" class="section">
-<h2>Müşteriler</h2>
-<div class="form">
-<input id="yeniMusteriAdi" placeholder="Ad Soyad">
-<button onclick="musteriKaydet()">Müşteri Kaydet</button>
-</div>
-<div id="musteriListesi"></div>
-</section>
-
-<section id="faturalar" class="section">
-<h2>Faturalar</h2>
-<div id="faturaListesi"></div>
-</section>
-
-<section id="odemeler" class="section">
-<h2>Ödemeler</h2>
-<div id="odemeListesi"></div>
-</section>
-
-<section id="rapor" class="section">
-<h2>Raporlama</h2>
-<div id="raporListesi" class="form"></div>
-</section>
-
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-<script>
-const SUPABASE_URL = "https://mpwspnccuaqyitwghqip.supabase.co";
-const SUPABASE_KEY = "sb_publishable_lWeTQWJVlynCDmQWcdDSVQ_E0AfIJJX";
-const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-let veriler = [];
-let musteriler = [];
-let firmalar = [];
-let secilenMusteriIds = [];
-let duzenlemeIndex = null;
-let kartlar = [];
-async function verileriYukle() {
-  let { data, error } = await db
-    .from("ortak_veri")
-    .select("*")
-    .eq("id", 1)
-    .single();
-
-  if (data) {
-    veriler = data.data?.veriler || [];
-    musteriler = data.data?.musteriler || [];
-    firmalar = data.data?.firmalar || [];
-    kartlar = data.data?.kartlar || [];
-kartlariDoldur();
-    kartlar = data.data?.kartlar || [];
-kartlariDoldur();
-  } else {
-    console.error(error);
-  }
-}
-
-async function kaydet() {
-  let { error } = await db
-    .from("ortak_veri")
-    .update({
-     data: {
-  veriler,
-  musteriler,
-  firmalar,
-  kartlar
-}
-    })
-    .eq("id", 1);
-
-  if (error) {
-    console.error("HATA:", error);
-    alert("Supabase kayıt hatası!");
-  } else {
-    console.log("Kaydedildi kanka 😎");
-  }
-}
-
-function sekmeAc(id){
-    document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));
-    document.getElementById(id).classList.add("active");
-
-    document.querySelectorAll(".topbar button").forEach(b=>b.classList.remove("active"));
-    if (event && event.target) event.target.classList.add("active");
-
-    listele();
-    musteriListele();
-    faturaListele();
-    odemeListele();
-    raporla();
-}
-
-function formatPara(tutar, para){
-    let sembol = para === "TL" ? "TL" : para === "EUR" ? "€" : "$";
-    return (Number(tutar)||0).toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}) + " " + sembol;
-}
-
-function formatTL(tutar){
-    return (Number(tutar)||0).toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}) + " TL";
-}
-
-function kdvHesapla(tutar,isTipi){
-    let oran = isTipi === "YURT DIŞI" ? 0 : 0.12;
-    let dahil = Number(tutar)||0;
-    let haric = dahil / (1+oran);
-    let kdv = dahil - haric;
-    return {oran,dahil,haric,kdv};
-}
-
-function gecelemeHesapla(checkin, checkout){
-    if(!checkin || !checkout) return 0;
-    let gun = (new Date(checkout)-new Date(checkin))/(1000*60*60*24);
-    return gun > 0 ? gun : 0;
-}
-
-async function kurGetir(){
-    let para = document.getElementById("para").value;
-    let kurInput = document.getElementById("kur");
-
-    if(para === "TL"){
-        kurInput.value = 1;
-        return;
-    }
-
-    try{
-        let response = await fetch(`https://open.er-api.com/v6/latest/${para}`);
-        let data = await response.json();
-        if(data && data.rates && data.rates.TRY){
-            kurInput.value = data.rates.TRY.toFixed(4);
-        }
-    }catch(e){
-        alert("Kur çekilemedi kanka. Elle yazabilirsin.");
-    }
-}
-
-function musteriKaydet(){
-    let ad = document.getElementById("yeniMusteriAdi").value.trim();
-    if(!ad) return alert("Müşteri adı yaz kanka.");
-
-    let yeni = {id:Date.now(), ad};
-    musteriler.push(yeni);
-
-    kaydet(); // 🔥 BU ÖNEMLİ
-
-    document.getElementById("yeniMusteriAdi").value="";
-    musteriListele();
-}
-function firmaKaydet(){
-    let ad = document.getElementById("firma").value.trim();
-    if(!ad) return alert("Firma adı yaz.");
-
-    let varMi = firmalar.some(f => f.ad.toLowerCase() === ad.toLowerCase());
-    if(varMi) return alert("Bu firma zaten var.");
-
-    firmalar.push({
-        id: Date.now(),
-        ad: ad
-    });
-
-    kaydet(); // 🔥 BU DA
-
-    firmaAra();
-    alert("Firma kaydedildi.");
-}
-function firmaAra(){
-    let q = document.getElementById("firma").value.toLowerCase();
-    let alan = document.getElementById("firmaSonuclari");
-
-    if(!alan) return;
-
-    alan.innerHTML = "";
-
-    if(!q) return;
-
-    let sonuc = firmalar.filter(f => f.ad.toLowerCase().includes(q));
-
-    sonuc.forEach(firma => {
-        alan.innerHTML += `
-            <div class="customer-result" onclick="firmaSec('${firma.ad.replace(/'/g, "\\'")}')">
-                ${firma.ad}
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <section id="loginView" class="login-view">
+    <form id="loginForm" class="login-card">
+      <img src="logo.png" alt="MIA VIP Tour" class="login-logo">
+      <p class="eyebrow">GÜVENLİ İŞ TAKİP SİSTEMİ</p>
+      <h1>Tekrar hoş geldin</h1>
+      <p class="muted">Devam etmek için yetkili hesabınla giriş yap.</p>
+      <label>E-posta<input id="loginEmail" type="email" autocomplete="username" required></label>
+      <label>Şifre<input id="loginPassword" type="password" autocomplete="current-password" required></label>
+      <button id="loginButton" class="primary wide" type="submit">Giriş yap</button>
+      <p id="loginError" class="error-text"></p>
+    </form>
+  </section>
+
+  <div id="appView" class="app-view hidden">
+    <aside class="sidebar">
+      <div class="brand"><img src="logo.png" alt="MIA VIP Tour"><span>Otel Operasyon</span></div>
+      <nav id="nav">
+        <button data-page="dashboard" class="active">Genel Bakış</button>
+        <button data-page="newJob">Yeni İş</button>
+        <button data-page="jobs">İşler</button>
+        <button data-page="customers">Müşteriler</button>
+        <button data-page="invoices">Faturalar</button>
+        <button data-page="payments">Ödemeler</button>
+        <button data-page="reports">Raporlama</button>
+        <button data-page="trash">Çöp Kutusu</button>
+        <button data-page="backup">Yedekleme</button>
+      </nav>
+      <div class="sidebar-footer">
+        <span id="userEmail"></span>
+        <button id="logoutButton" class="ghost">Çıkış yap</button>
+      </div>
+    </aside>
+
+    <main>
+      <header class="mobile-header">
+        <button id="menuButton" class="ghost">☰</button>
+        <img src="logo.png" alt="MIA VIP Tour">
+      </header>
+
+      <div id="migrationBanner" class="notice warning hidden">
+        <div><strong>Eski faturalar güvenli dosya alanına taşınmalı.</strong><br><span id="migrationText"></span></div>
+        <button id="migrateDocumentsButton" class="primary">Şimdi taşı</button>
+      </div>
+
+      <section id="page-dashboard" class="page active">
+        <div class="page-head"><div><p class="eyebrow">OPERASYON ÖZETİ</p><h1>Genel Bakış</h1></div><button data-go="newJob" class="primary">+ Yeni iş</button></div>
+        <div id="stats" class="stats-grid"></div>
+        <div class="panel"><div class="panel-head"><h2>Son İşler</h2><button data-go="jobs" class="link-button">Tümünü gör</button></div><div id="recentJobs"></div></div>
+      </section>
+
+      <section id="page-newJob" class="page">
+        <div class="page-head"><div><p class="eyebrow">KAYIT</p><h1 id="jobFormTitle">Yeni İş</h1></div></div>
+        <form id="jobForm" class="panel form-grid">
+          <input id="jobId" type="hidden"><input id="jobVersion" type="hidden">
+          <label id="jobCreatedAtField" class="span-2 hidden">İşin sisteme girildiği tarih<input id="jobCreatedAt" type="text" readonly></label>
+          <label>Firma*<select id="companyId" required></select></label>
+          <label class="inline-create">Yeni firma<input id="newCompanyName" placeholder="Firma adı"><button id="addCompanyButton" type="button" class="secondary">Ekle</button></label>
+          <label>Otel*<input id="hotelName" required></label>
+          <label>Oda sayısı*<input id="roomCount" type="number" min="1" value="1" required></label>
+          <label class="span-2">Oda tipi<input id="roomType"></label>
+          <label>Check-in<input id="checkIn" type="date"></label>
+          <label>Check-out<input id="checkOut" type="date"></label>
+          <div class="span-2 customer-picker">
+            <label for="customerSearch">Misafirler</label>
+            <input id="customerSearch" type="search" placeholder="Misafir ismiyle ara..." autocomplete="off">
+            <label class="customer-company-only"><input id="customerCompanyOnly" type="checkbox" checked> Yalnızca seçili firmanın müşterilerini göster</label>
+            <div id="customerSearchResults" class="customer-search-results"></div>
+            <div id="selectedCustomers" class="selected-customers"></div>
+            <select id="customerIds" class="hidden" multiple aria-hidden="true"></select>
+            <small>İsmi yazıp sonuca tıklayarak bir veya birden fazla misafir seçebilirsin.</small>
+          </div>
+          <label class="inline-create span-2">Yeni müşteri<input id="newCustomerName" placeholder="Ad Soyad"><button id="addCustomerButton" type="button" class="secondary">Kaydet ve seç</button></label>
+          <label>Talep eden<input id="requester"></label>
+          <label>Talep kanalı<select id="requestChannel"><option>WhatsApp</option><option>Mail</option><option>Telefon</option><option>Diğer</option></select></label>
+          <label>İş tipi<select id="jobType"><option>YURT İÇİ</option><option>YURT DIŞI</option></select></label>
+          <label>Para birimi<select id="currency"><option>TL</option><option>EUR</option><option>USD</option></select></label>
+          <label>Maliyet (KDV dahil)<input id="cost" type="number" min="0" step="0.01" value="0"></label>
+          <label>Satış (KDV dahil)<input id="sale" type="number" min="0" step="0.01" value="0"></label>
+          <label>Kur<input id="exchangeRate" type="number" min="0.000001" step="0.000001" value="1"></label>
+          <label>Ödeme yöntemi<select id="paymentMethod"><option>Havale</option><option>Kredi Kartı</option><option>Sanal Kart</option><option>Nakit</option><option>Cari</option></select></label>
+          <label id="cardField" class="hidden">Kart<select id="paymentCardId"></select><span class="inline-mini"><input id="newCardName" placeholder="Yeni kart adı / son 4 hane"><button id="addCardButton" type="button" class="secondary">Ekle</button></span></label>
+          <label>Gelen fatura durumu (otel)<select id="hotelInvoiceStatus"><option>Bekliyor</option><option>Geldi</option><option>Gerek Yok</option></select></label>
+          <label>Giden fatura durumu (bizim kestiğimiz)<select id="customerInvoiceStatus"><option>Kesilmedi</option><option>Kesildi</option></select></label>
+          <label>Ödeme<select id="paymentStatus"><option>Bekliyor</option><option>Alındı</option><option>Kısmi</option></select></label>
+          <div class="span-2 invoice-upload-grid">
+            <section class="invoice-upload-card incoming">
+              <div><span class="invoice-direction">GELEN FATURA</span><h3>Otelin bize kestiği fatura</h3><p>Otelden gelen alış/giriş faturalarının PDF veya görsellerini ekle.</p></div>
+              <label>Dosya seç (dosya başına en fazla 20 MB)<input id="incomingInvoiceFiles" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple></label>
+              <div id="existingIncomingDocuments" class="document-list"></div>
+            </section>
+            <section class="invoice-upload-card outgoing">
+              <div><span class="invoice-direction">GİDEN FATURA</span><h3>Bizim karşı tarafa kestiğimiz fatura</h3><p>Bu iş için düzenlediğimiz satış/çıkış faturalarının PDF veya görsellerini ekle.</p></div>
+              <label>Dosya seç (dosya başına en fazla 20 MB)<input id="outgoingInvoiceFiles" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple></label>
+              <div id="existingOutgoingDocuments" class="document-list"></div>
+            </section>
+          </div>
+          <label class="span-2">Ekstralar<textarea id="extras"></textarea></label>
+          <label class="span-2">Notlar<textarea id="notes"></textarea></label>
+          <div class="span-2 form-actions"><button id="saveJobButton" class="primary" type="submit">İşi kaydet</button><button id="cancelEditButton" class="secondary hidden" type="button">Vazgeç</button></div>
+        </form>
+      </section>
+
+      <section id="page-jobs" class="page">
+        <div class="page-head"><div><p class="eyebrow">TÜM KAYITLAR</p><h1>İşler</h1></div><button data-go="newJob" class="primary">+ Yeni iş</button></div>
+        <div class="panel filters">
+          <div class="filter-grid">
+            <label class="filter-search">Genel arama<input id="searchInput" type="search" placeholder="Firma, otel, müşteri, not ara..."></label>
+            <label>Firma<select id="filterCompanyId"><option value="">Tüm firmalar</option></select></label>
+            <label>İş tipi<select id="filterJobType"><option value="">Tümü</option><option>YURT İÇİ</option><option>YURT DIŞI</option></select></label>
+            <label>Tarih ölçütü<select id="filterDateField"><option value="check_in">Check-in tarihi</option><option value="created_at">İşin girildiği tarih</option></select></label>
+            <label>Tarih başlangıç<input id="filterDateFrom" type="date"></label>
+            <label>Tarih bitiş<input id="filterDateTo" type="date"></label>
+            <label>Para birimi<select id="filterCurrency"><option value="">Tümü</option><option>TL</option><option>EUR</option><option>USD</option></select></label>
+            <label>Ödeme yöntemi<select id="filterPaymentMethod"><option value="">Tümü</option><option>Havale</option><option>Kredi Kartı</option><option>Sanal Kart</option><option>Nakit</option><option>Cari</option></select></label>
+            <label>Gelen fatura durumu<select id="filterHotelInvoice"><option value="">Tümü</option><option>Bekliyor</option><option>Geldi</option><option>Gerek Yok</option></select></label>
+            <label>Giden fatura durumu<select id="filterCustomerInvoice"><option value="">Tümü</option><option>Kesilmedi</option><option>Kesildi</option></select></label>
+            <label>Ödeme durumu<select id="filterPayment"><option value="">Tümü</option><option>Bekliyor</option><option>Alındı</option><option>Kısmi</option></select></label>
+            <label>Sıralama<select id="filterSort"><option value="created_desc">İş giriş tarihi: yeniden eskiye</option><option value="created_asc">İş giriş tarihi: eskiden yeniye</option><option value="checkin_asc">Yaklaşan check-in</option><option value="checkin_desc">Check-in: yeniden eskiye</option><option value="sale_desc">En yüksek satış</option><option value="profit_desc">En yüksek kâr</option></select></label>
+          </div>
+          <div class="filter-actions">
+            <strong id="filterResultSummary">0 iş bulundu</strong>
+            <div><button id="clearJobFiltersButton" class="secondary" type="button">Filtreleri temizle</button><button id="exportFilteredJobsButton" class="primary" type="button">Filtrelenenleri Excel indir</button></div>
+          </div>
+        </div>
+        <div id="jobsList"></div><div id="pagination" class="pagination"></div>
+      </section>
+
+      <section id="page-customers" class="page">
+        <div class="page-head"><div><p class="eyebrow">FİRMA BAZLI CARİ KARTLAR</p><h1>Müşteriler</h1></div></div>
+        <div class="panel customer-create-panel">
+          <h2>Yeni müşteri ekle</h2>
+          <div class="inline-form"><input id="customerPageName" placeholder="Ad Soyad"><button id="customerPageAdd" class="primary">Müşteri ekle</button></div>
+          <p class="muted">Müşterinin bağlı olduğu bir veya birden fazla firmayı seç:</p>
+          <div id="customerPageCompanyChecks" class="company-check-grid"></div>
+        </div>
+        <div class="panel customer-list-filters">
+          <label>Müşteri ara<input id="customerListSearch" type="search" placeholder="Ad soyad..."></label>
+          <label>Firma filtresi<select id="customerListCompanyFilter"><option value="">Tüm firmalar</option></select></label>
+          <strong id="customerListSummary">0 müşteri</strong>
+        </div>
+        <div id="customersList" class="simple-list"></div>
+      </section>
+
+      <section id="page-invoices" class="page">
+        <div class="page-head"><div><p class="eyebrow">GELEN / GİDEN BELGELER</p><h1>Fatura Arşivi</h1><p class="muted">Otelden gelen faturaları ve bizim kestiğimiz faturaları tek yerden bul, aç ve toplu indir.</p></div></div>
+        <div class="invoice-stat-grid">
+          <div class="invoice-stat incoming"><span>Gelen fatura</span><strong id="invoiceIncomingCount">0</strong><small>Otellerden gelen</small></div>
+          <div class="invoice-stat outgoing"><span>Giden fatura</span><strong id="invoiceOutgoingCount">0</strong><small>Bizim kestiklerimiz</small></div>
+          <div class="invoice-stat total"><span>Filtrelenen toplam</span><strong id="invoiceTotalCount">0</strong><small>Dosya</small></div>
+        </div>
+        <div class="panel invoice-filter-panel">
+          <input id="invoiceKind" type="hidden" value="">
+          <div id="invoiceKindTabs" class="invoice-kind-tabs">
+            <button type="button" class="active" data-kind="">Tüm faturalar</button>
+            <button type="button" data-kind="incoming">Gelen faturalar</button>
+            <button type="button" data-kind="outgoing">Giden faturalar</button>
+          </div>
+          <div class="invoice-filter-grid">
+            <label class="invoice-search">Ara<input id="invoiceSearch" type="search" placeholder="Firma, otel, misafir veya dosya adı..."></label>
+            <label>Tarih ölçütü<select id="invoiceDateField"><option value="check_in">İşin check-in tarihi</option><option value="uploaded_at">Faturanın yüklenme tarihi</option></select></label>
+            <label>Başlangıç<input id="invoiceDateFrom" type="date"></label>
+            <label>Bitiş<input id="invoiceDateTo" type="date"></label>
+            <label>Firma<select id="invoiceCompanyId"><option value="">Tüm firmalar</option></select></label>
+            <label>İş tipi<select id="invoiceJobType"><option value="">Yurtiçi + Yurtdışı</option><option>YURT İÇİ</option><option>YURT DIŞI</option></select></label>
+          </div>
+          <div class="invoice-filter-actions">
+            <strong id="invoiceResultSummary">0 fatura bulundu</strong>
+            <div>
+              <button id="invoiceThisMonthButton" class="secondary" type="button">Bu ay</button>
+              <button id="clearInvoiceFiltersButton" class="secondary" type="button">Filtreleri temizle</button>
+              <button id="downloadFilteredInvoicesButton" class="primary" type="button">Filtrelenen faturaları ZIP indir</button>
             </div>
-        `;
-    });
-}
-
-function firmaSec(ad){
-    document.getElementById("firma").value = ad;
-    document.getElementById("firmaSonuclari").innerHTML = "";
-}
-
-async function musteriKaydetVeEkle(){
-    let ad = document.getElementById("musteriAra").value.trim();
-    if(!ad) return alert("Müşteri adı yaz.");
-
-    let yeni = {id:Date.now(), ad};
-    musteriler.push(yeni);
-    secilenMusteriIds.push(yeni.id);
-
-    document.getElementById("musteriAra").value="";
-    await kaydet();
-    musteriAra();
-    secilenMusterileriGoster();
-    musteriListele();
-}
-
-async function musteriSil(id){
-    if(confirm("Müşteriyi silmek istiyor musun?")){
-        musteriler = musteriler.filter(m=>m.id !== id);
-        secilenMusteriIds = secilenMusteriIds.filter(mid=>mid !== id);
-        await kaydet();
-        musteriListele();
-        secilenMusterileriGoster();
-    }
-}
-
-function musteriListele(){
-    let alan = document.getElementById("musteriListesi");
-    if(!alan) return;
-
-    alan.innerHTML = "";
-
-    if(musteriler.length === 0){
-        alan.innerHTML = `<div class="card">Henüz müşteri yok.</div>`;
-        return;
-    }
-
-    musteriler.forEach(m=>{
-        alan.innerHTML += `
-        <div class="card">
-            <b>${m.ad}</b>
-            <button class="btn-delete" onclick="musteriSil(${m.id})">Sil</button>
-        </div>`;
-    });
-}
-
-function musteriAra(){
-    let q = document.getElementById("musteriAra").value.toLowerCase();
-    let alan = document.getElementById("musteriSonuclari");
-    alan.innerHTML = "";
-
-    if(!q) return;
-
-    let sonuc = musteriler.filter(m=>m.ad.toLowerCase().includes(q));
-
-    sonuc.forEach(m=>{
-        alan.innerHTML += `<div class="customer-result" onclick="musteriSec(${m.id})">${m.ad}</div>`;
-    });
-}
-
-function musteriSec(id){
-    if(!secilenMusteriIds.includes(id)){
-        secilenMusteriIds.push(id);
-    }
-    document.getElementById("musteriAra").value="";
-    document.getElementById("musteriSonuclari").innerHTML="";
-    secilenMusterileriGoster();
-}
-
-function secilenMusteriSil(id){
-    secilenMusteriIds = secilenMusteriIds.filter(mid=>mid !== id);
-    secilenMusterileriGoster();
-}
-
-function secilenMusterileriGoster(){
-    let alan = document.getElementById("secilenMusteriler");
-    alan.innerHTML = "";
-
-    secilenMusteriIds.forEach(id=>{
-        let m = musteriler.find(x=>x.id === id);
-        if(m){
-            alan.innerHTML += `<span class="customer-pill">${m.ad} <button onclick="secilenMusteriSil(${id})">x</button></span>`;
-        }
-    });
-}
-
-function musteriAdlari(ids){
-    if(!ids || ids.length === 0) return "-";
-    return ids.map(id=>{
-        let m = musteriler.find(x=>x.id === id);
-        return m ? m.ad : "";
-    }).filter(Boolean).join(", ");
-}
-
-function dashboardGuncelle(){
-    let toplamIs=veriler.length, toplamMaliyet=0, toplamSatis=0, toplamKar=0;
-    let bekleyenFatura=0, kesilmeyenFatura=0, odemeBekleyen=0;
-
-    veriler.forEach(item=>{
-        let kur = Number(item.kur)||1;
-        let maliyet = Number(item.maliyet)||0;
-        let satis = Number(item.satis)||0;
-
-        toplamMaliyet += maliyet * kur;
-        toplamSatis += satis * kur;
-        toplamKar += (satis-maliyet) * kur;
-
-        if(item.otelFatura==="Bekliyor" || !item.otelFatura) bekleyenFatura++;
-        if(item.musteriFatura==="Kesilmedi") kesilmeyenFatura++;
-        if(item.odeme==="Bekliyor") odemeBekleyen++;
-    });
-
-    let karOrani = toplamSatis > 0 ? ((toplamKar/toplamSatis)*100).toFixed(1) : 0;
-
-    document.getElementById("toplamIs").innerText=toplamIs;
-    document.getElementById("toplamMaliyet").innerText=formatTL(toplamMaliyet);
-    document.getElementById("toplamSatis").innerText=formatTL(toplamSatis);
-    document.getElementById("toplamKar").innerText=formatTL(toplamKar);
-    document.getElementById("karOrani").innerText=karOrani+"%";
-    document.getElementById("bekleyenFatura").innerText=bekleyenFatura;
-    document.getElementById("kesilmeyenFatura").innerText=kesilmeyenFatura;
-    document.getElementById("odemeBekleyen").innerText=odemeBekleyen;
-}
-
-function listele(){
-    let liste = document.getElementById("liste");
-    if(!liste) return;
-    liste.innerHTML="";
-
-    let arama = document.getElementById("arama") ? document.getElementById("arama").value.toLowerCase() : "";
-    let filtreOtelFatura = document.getElementById("filtreOtelFatura") ? document.getElementById("filtreOtelFatura").value : "";
-    let filtreMusteriFatura = document.getElementById("filtreMusteriFatura") ? document.getElementById("filtreMusteriFatura").value : "";
-    let filtreOdeme = document.getElementById("filtreOdeme") ? document.getElementById("filtreOdeme").value : "";
-
-    veriler.forEach((item,index)=>{
-        let musteriText = musteriAdlari(item.musteriIds);
-        let aramaMetni = `${item.firma||""} ${item.otel||""} ${musteriText} ${item.notlar||""} ${item.ekstralar||""}`.toLowerCase();
-
-        if(arama && !aramaMetni.includes(arama)) return;
-        if(filtreOtelFatura && item.otelFatura !== filtreOtelFatura) return;
-        if(filtreMusteriFatura && item.musteriFatura !== filtreMusteriFatura) return;
-        if(filtreOdeme && item.odeme !== filtreOdeme) return;
-
-        liste.appendChild(kartOlustur(item,index));
-    });
-
-    dashboardGuncelle();
-}
-
-function kartOlustur(item,index){
-    let para = item.para || "TL";
-    let kur = Number(item.kur)||1;
-    let maliyet = kdvHesapla(item.maliyet,item.isTipi);
-    let satis = kdvHesapla(item.satis,item.isTipi);
-    let kar = satis.dahil - maliyet.dahil;
-    let geceleme = gecelemeHesapla(item.checkin,item.checkout);
-
-    let div=document.createElement("div");
-    div.className="card";
-
-    div.innerHTML=`
-    <b>Firma:</b> ${item.firma||"-"}<br>
-    <b>Otel:</b> ${item.otel||"-"}<br>
-    <b>Müşteriler:</b> ${musteriAdlari(item.musteriIds)}<br>
-    <b>Oda:</b> ${item.oda||"-"} / ${item.odaTipi||"-"}<br>
-    <b>Check-in:</b> ${item.checkin||"-"} | <b>Check-out:</b> ${item.checkout||"-"} | <b>Gece:</b> ${geceleme}<br><br>
-
-    <b>İş Tipi:</b> ${item.isTipi||"YURT İÇİ"} | <b>KDV:</b> %${maliyet.oran*100}<br>
-    <b>Maliyet KDV Hariç:</b> ${formatPara(maliyet.haric,para)}<br>
-    <b>Maliyet KDV:</b> ${formatPara(maliyet.kdv,para)}<br>
-    <b>Maliyet KDV Dahil:</b> ${formatPara(maliyet.dahil,para)}<br><br>
-
-    <b>Satış KDV Hariç:</b> ${formatPara(satis.haric,para)}<br>
-    <b>Satış KDV:</b> ${formatPara(satis.kdv,para)}<br>
-    <b>Satış KDV Dahil:</b> ${formatPara(satis.dahil,para)}<br><br>
-
-    <span class="kar">Kâr: ${formatPara(kar,para)}</span><br>
-    <b>Kâr TL:</b> ${formatTL(kar*kur)}<br><br>
-
-    <b>Ödeme Yöntemi:</b> ${item.odemeYontemi || "-"} ${item.kartBilgisi ? "(" + item.kartBilgisi + ")" : ""}<br>
-    <b>Otel Faturası:</b> ${item.otelFatura||"-"}<br>
-    <b>Müşteri Faturası:</b> ${item.musteriFatura||"-"}<br>
-    <b>Ödeme:</b> ${item.odeme||"-"}<br><br>
-
-    <b>Ekstralar:</b><br><span class="small">${item.ekstralar||"-"}</span><br><br>
-    <b>Notlar:</b><br><span class="small">${item.notlar||"-"}</span><br><br>
-
-    ${item.faturaData ? `<button class="btn-file" onclick="faturaAc(${index})">Faturayı Aç</button>` : ""}
-    <button class="btn-edit" onclick="duzenle(${index})">Düzenle</button>
-    <button class="btn-delete" onclick="sil(${index})">Sil</button>
-    `;
-
-    return div;
-}
-
-function dosyaOku(){
-    return new Promise(resolve=>{
-        let dosya=document.getElementById("faturaDosya").files[0];
-        if(!dosya) return resolve({data:null,ad:null});
-        let reader=new FileReader();
-        reader.onload=e=>resolve({data:e.target.result,ad:dosya.name});
-        reader.readAsDataURL(dosya);
-    });
-}
-
-async function ekle(){
-    let dosya = await dosyaOku();
-
-    let veri={
-        kartBilgisi: document.getElementById("kartSec").value,
-        firma:document.getElementById("firma").value,
-        otel:document.getElementById("otel").value,
-        oda:document.getElementById("oda").value,
-        odaTipi:document.getElementById("odaTipi").value,
-        checkin:document.getElementById("checkin").value,
-        checkout:document.getElementById("checkout").value,
-        musteriIds:[...secilenMusteriIds],
-        talepEden:document.getElementById("talepEden").value,
-        talepKanali:document.getElementById("talepKanali").value,
-        isTipi:document.getElementById("isTipi").value,
-        maliyet:document.getElementById("maliyet").value,
-        satis:document.getElementById("satis").value,
-        para:document.getElementById("para").value,
-        kur:document.getElementById("kur").value,
-        odemeYontemi:document.getElementById("odemeYontemi").value,
-        otelFatura:document.getElementById("otelFatura").value,
-        musteriFatura:document.getElementById("musteriFatura").value,
-        odeme:document.getElementById("odeme").value,
-        ekstralar:document.getElementById("ekstralar").value,
-        notlar:document.getElementById("notlar").value,
-        faturaData:dosya.data,
-        faturaAdi:dosya.ad
-    };
-
-    if(duzenlemeIndex !== null){
-        if(!dosya.data){
-            veri.faturaData = veriler[duzenlemeIndex].faturaData || null;
-            veri.faturaAdi = veriler[duzenlemeIndex].faturaAdi || null;
-        }
-        veriler[duzenlemeIndex]=veri;
-        duzenlemeIndex=null;
-    }else{
-        veriler.push(veri);
-    }
-
-    await kaydet();
-    formTemizle();
-    listele();
-    alert("İş kaydedildi kanka.");
-}
-
-function duzenle(index){
-    let item=veriler[index];
-    duzenlemeIndex=index;
-
-    sekmeAcManuel("yeni");
-
-    document.getElementById("firma").value=item.firma||"";
-    document.getElementById("otel").value=item.otel||"";
-    document.getElementById("oda").value=item.oda||"";
-    document.getElementById("odaTipi").value=item.odaTipi||"";
-    document.getElementById("checkin").value=item.checkin||"";
-    document.getElementById("checkout").value=item.checkout||"";
-    secilenMusteriIds=item.musteriIds||[];
-    secilenMusterileriGoster();
-    document.getElementById("talepEden").value=item.talepEden||"";
-    document.getElementById("talepKanali").value=item.talepKanali||"WhatsApp";
-    document.getElementById("isTipi").value=item.isTipi||"YURT İÇİ";
-    document.getElementById("maliyet").value=item.maliyet||"";
-    document.getElementById("satis").value=item.satis||"";
-    document.getElementById("para").value=item.para||"TL";
-    document.getElementById("kur").value=item.kur||1;
-    document.getElementById("odemeYontemi").value=item.odemeYontemi||"Havale";
-    document.getElementById("otelFatura").value=item.otelFatura||"Bekliyor";
-    document.getElementById("musteriFatura").value=item.musteriFatura||"Kesilmedi";
-    document.getElementById("odeme").value=item.odeme||"Bekliyor";
-    document.getElementById("ekstralar").value=item.ekstralar||"";
-    document.getElementById("notlar").value=item.notlar||"";
-    document.getElementById("anaButon").innerText="Güncelle";
-    document.getElementById("formBaslik").innerText="İşi Düzenle";
-    kartlariDoldur();
-document.getElementById("kartSec").value = item.kartBilgisi || "";
-kartAlaniKontrol();
-}
-
-function sekmeAcManuel(id){
-    document.querySelectorAll(".section").forEach(s=>s.classList.remove("active"));
-    document.getElementById(id).classList.add("active");
-}
-
-async function sil(index){
-    if(confirm("Bu işi silmek istiyor musun?")){
-        veriler.splice(index,1);
-        await kaydet();
-        listele();
-    }
-}
-
-function faturaAc(index){
-    let item=veriler[index];
-    let win=window.open();
-    win.document.write(`<iframe src="${item.faturaData}" style="width:100%;height:100vh;border:0"></iframe>`);
-}
-
-function filtreTemizle(){
-    document.getElementById("arama").value="";
-    document.getElementById("filtreOtelFatura").value="";
-    document.getElementById("filtreMusteriFatura").value="";
-    document.getElementById("filtreOdeme").value="";
-    listele();
-}
-
-function formTemizle(){
-    document.querySelectorAll("#yeni input, #yeni textarea").forEach(el=>{
-        if(el.id !== "kur") el.value="";
-    });
-
-    document.getElementById("talepKanali").value="WhatsApp";
-    document.getElementById("isTipi").value="YURT İÇİ";
-    document.getElementById("para").value="TL";
-    document.getElementById("kur").value=1;
-    document.getElementById("odemeYontemi").value="Havale";
-    document.getElementById("otelFatura").value="Bekliyor";
-    document.getElementById("musteriFatura").value="Kesilmedi";
-    document.getElementById("odeme").value="Bekliyor";
-    document.getElementById("anaButon").innerText="İşi Ekle";
-    document.getElementById("formBaslik").innerText="Yeni İş Ekle";
-    secilenMusteriIds=[];
-    secilenMusterileriGoster();
-    duzenlemeIndex=null;
-}
-
-function faturaListele(){
-    let alan=document.getElementById("faturaListesi");
-    if(!alan) return;
-    alan.innerHTML="";
-
-    let liste=veriler.filter(x=>x.otelFatura==="Bekliyor" || x.musteriFatura==="Kesilmedi");
-    if(liste.length===0){
-        alan.innerHTML=`<div class="card">Bekleyen fatura yok.</div>`;
-        return;
-    }
-
-    liste.forEach((item,i)=>{
-        alan.appendChild(kartOlustur(item, veriler.indexOf(item)));
-    });
-}
-
-function odemeListele(){
-    let alan=document.getElementById("odemeListesi");
-    if(!alan) return;
-    alan.innerHTML="";
-
-    let liste=veriler.filter(x=>x.odeme==="Bekliyor" || x.odeme==="Kısmi");
-    if(liste.length===0){
-        alan.innerHTML=`<div class="card">Bekleyen ödeme yok.</div>`;
-        return;
-    }
-
-    liste.forEach(item=>{
-        alan.appendChild(kartOlustur(item, veriler.indexOf(item)));
-    });
-}
-
-function raporla(){
-    let alan = document.getElementById("raporListesi");
-    if(!alan) return;
-
-    let firmaRapor = {};
-
-    veriler.forEach(item => {
-        let firma = item.firma || "Firma Yok";
-        let kur = Number(item.kur) || 1;
-        let satis = Number(item.satis) || 0;
-        let maliyet = Number(item.maliyet) || 0;
-
-        if(!firmaRapor[firma]){
-            firmaRapor[firma] = {
-                is: 0,
-                satis: 0,
-                kar: 0
-            };
-        }
-
-        firmaRapor[firma].is++;
-        firmaRapor[firma].satis += satis * kur;
-        firmaRapor[firma].kar += (satis - maliyet) * kur;
-    });
-
-    let html = "<h3>Firma Bazlı Rapor</h3>";
-
-    Object.keys(firmaRapor).forEach(firma => {
-        html += `
-        <div class="card">
-            <b>${firma}</b><br>
-            İş Sayısı: ${firmaRapor[firma].is}<br>
-            Satış: ${formatTL(firmaRapor[firma].satis)}<br>
-            Kâr: ${formatTL(firmaRapor[firma].kar)}<br><br>
-
-            <button onclick="firmaIsleriniGoster('${firma.replace(/'/g, "\\'")}')">İşleri Gör</button>
-            <button onclick="firmaExcelIndir('${firma.replace(/'/g, "\\'")}')">Hizmet Dökümü Excel İndir</button>
-        </div>`;
-    });
-
-    alan.innerHTML = html;
-}
-
-function firmaIsleriniGoster(firma){
-    let alan = document.getElementById("raporListesi");
-
-    let firmaIsleri = veriler.filter(item => (item.firma || "Firma Yok") === firma);
-
-    let html = `
-        <button onclick="raporla()">← Firma Raporuna Dön</button>
-        <h3>${firma} İşleri</h3>
-    `;
-
-    firmaIsleri.forEach(item => {
-        let para = item.para || "TL";
-        let satis = Number(item.satis) || 0;
-        let geceleme = gecelemeHesapla(item.checkin, item.checkout);
-
-        html += `
-        <div class="card">
-            <b>Otel:</b> ${item.otel || "-"}<br>
-            <b>Müşteriler:</b> ${musteriAdlari(item.musteriIds)}<br>
-            <b>Oda Sayısı:</b> ${item.oda || "-"}<br>
-            <b>Oda Tipi:</b> ${item.odaTipi || "-"}<br>
-            <b>Check-in:</b> ${item.checkin || "-"}<br>
-            <b>Check-out:</b> ${item.checkout || "-"}<br>
-            <b>Geceleme:</b> ${geceleme}<br>
-            <b>Satış KDV Dahil:</b> ${formatPara(satis, para)}<br>
-            <b>Otel Faturası:</b> ${item.otelFatura || "-"}<br>
-            <b>Müşteri Faturası:</b> ${item.musteriFatura || "-"}<br>
-            <b>Ödeme:</b> ${item.odeme || "-"}<br>
-        </div>`;
-    });
-
-    alan.innerHTML = html;
-}
-
-function firmaExcelIndir(firma){
-    let firmaIsleri = veriler.filter(item => (item.firma || "Firma Yok") === firma);
-
-    let satirlar = [];
-
-    satirlar.push([
-        "Firma",
-        "Otel",
-        "Müşteriler",
-        "Oda Sayısı",
-        "Oda Tipi",
-        "Check-in",
-        "Check-out",
-        "Geceleme",
-        "Satış KDV Dahil",
-        "Para Birimi",
-        "Otel Faturası",
-        "Müşteri Faturası",
-        "Ödeme",
-        "Ekstralar",
-        "Notlar"
-    ]);
-
-    firmaIsleri.forEach(item => {
-        satirlar.push([
-            item.firma || "",
-            item.otel || "",
-            musteriAdlari(item.musteriIds),
-            item.oda || "",
-            item.odaTipi || "",
-            item.checkin || "",
-            item.checkout || "",
-            gecelemeHesapla(item.checkin, item.checkout),
-            item.satis || "",
-            item.para || "TL",
-            item.otelFatura || "",
-            item.musteriFatura || "",
-            item.odeme || "",
-            item.ekstralar || "",
-            item.notlar || ""
-        ]);
-    });
-
-    let csv = satirlar.map(row =>
-        row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(";")
-    ).join("\n");
-
-    let blob = new Blob(["\uFEFF" + csv], {
-        type: "text/csv;charset=utf-8;"
-    });
-
-    let link = document.createElement("a");
-    let url = URL.createObjectURL(blob);
-
-    let dosyaAdi = firma.replaceAll(" ", "_") + "_Hizmet_Dokumu.csv";
-
-    link.setAttribute("href", url);
-    link.setAttribute("download", dosyaAdi);
-    link.style.display = "none";
-
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-}
-function kartAlaniKontrol(){
-    const odeme = document.getElementById("odemeYontemi").value;
-    const alan = document.getElementById("kartAlani");
-
-    if(odeme === "Kredi Kartı" || odeme === "Sanal Kart"){
-        alan.style.display = "block";
-        kartlariDoldur();
-    }else{
-        alan.style.display = "none";
-        document.getElementById("kartSec").value = "";
-    }
-}
-
-function kartlariDoldur(){
-    const sec = document.getElementById("kartSec");
-    if(!sec) return;
-
-    sec.innerHTML = '<option value="">Kart seç</option>';
-
-    kartlar.forEach(kart => {
-        sec.innerHTML += `<option value="${kart.ad}">${kart.ad}</option>`;
-    });
-}
-
-function kartKaydet(){
-    const ad = document.getElementById("yeniKart").value.trim();
-
-    if(!ad) return alert("Kart adı / son 4 hane yaz kanka.");
-
-    const varMi = kartlar.some(k => k.ad.toLowerCase() === ad.toLowerCase());
-    if(varMi) return alert("Bu kart zaten kayıtlı.");
-
-    kartlar.push({
-        id: Date.now(),
-        ad: ad
-    });
-
-    document.getElementById("yeniKart").value = "";
-    kartlariDoldur();
-    document.getElementById("kartSec").value = ad;
-
-    kaydet();
-    alert("Kart kaydedildi.");
-}
-verileriYukle();
-if (!veriler) veriler = [];
-if (!musteriler) musteriler = [];
-if (!firmalar) firmalar = [];
-</script>
+          </div>
+          <p id="invoiceDownloadProgress" class="muted"></p>
+        </div>
+        <div id="invoiceArchiveList" class="invoice-archive-list"></div>
+        <div id="invoicePagination" class="pagination"></div>
+      </section>
+      <section id="page-payments" class="page">
+        <div class="page-head"><div><p class="eyebrow">TAKİP</p><h1>Bekleyen Ödemeler</h1></div></div><div id="paymentJobs"></div>
+      </section>
+      <section id="page-reports" class="page">
+        <div class="page-head"><div><p class="eyebrow">ANALİZ</p><h1>Firma Raporu</h1></div></div><div id="companyReports" class="report-grid"></div>
+      </section>
+      <section id="page-trash" class="page">
+        <div class="page-head"><div><p class="eyebrow">GERİ ALINABİLİR</p><h1>Çöp Kutusu</h1></div></div><div id="trashJobs"></div>
+      </section>
+      <section id="page-backup" class="page">
+        <div class="page-head"><div><p class="eyebrow">VERİ GÜVENLİĞİ</p><h1>Yedekleme</h1></div></div>
+        <div class="panel backup-panel"><h2>Tam sistem yedeği</h2><p>Veritabanı kayıtlarını ve bütün fatura dosyalarını tek ZIP dosyasına indirir. Ayda en az bir kez indirmeni öneririz.</p><button id="downloadBackupButton" class="primary">Tam yedeği indir</button><p id="backupProgress" class="muted"></p></div>
+      </section>
+    </main>
+  </div>
 </body>
 </html>
