@@ -892,3 +892,54 @@ function downloadBlob(blob,name){const url=URL.createObjectURL(blob);const a=doc
 function handleError(error, fallback) { console.error(error); toast(`${fallback}: ${error?.message || "Bilinmeyen hata"}`, "error"); }
 
 init();
+
+
+// Yanlış yüklenen faturaları iş ekranından ve fatura arşivinden silme desteği
+function renderExistingDocuments(documents,kind,targetId){
+  const rows=documents.filter(document=>(document.kind==="outgoing"?"outgoing":"incoming")===kind);
+  $(targetId).innerHTML=rows.map(document=>`<div class="document-item"><span><span class="document-kind ${kind}">${kind==="incoming"?"GELEN":"GİDEN"}</span> ${esc(document.original_name)}</span><div class="document-item-actions"><button type="button" class="secondary" onclick="openDocument('${document.id}')">Aç</button><button type="button" class="danger" onclick="deleteInvoiceDocument('${document.id}',this)">Faturayı sil</button></div></div>`).join("");
+}
+
+window.deleteInvoiceDocument=async(id,button)=>{
+  if(!confirm("Bu fatura silinsin mi? Yanlış yüklenen dosya hem kayıttan hem depolamadan kaldırılacak ve bu işlem geri alınamaz."))return;
+  setBusy(button,true,"Siliniyor...");
+  try{
+    const {data:document,error}=await db.from("job_documents").select("id,job_id,kind,storage_path,original_name").eq("id",id).is("deleted_at",null).single();
+    if(error)throw error;
+    const {data:updated,error:updateError}=await db.from("job_documents").update({deleted_at:new Date().toISOString()}).eq("id",id).is("deleted_at",null).select("id");
+    if(updateError)throw updateError;
+    if(!updated?.length)throw new Error("Fatura daha önce silinmiş veya değişmiş.");
+    const kind=document.kind==="outgoing"?"outgoing":"incoming";
+    const {count,error:countError}=await db.from("job_documents").select("id",{count:"exact",head:true}).eq("job_id",document.job_id).eq("kind",kind).is("deleted_at",null);
+    if(countError)throw countError;
+    if(!count){
+      const statusPatch=kind==="outgoing"?{customer_invoice_status:"Kesilmedi"}:{hotel_invoice_status:"Bekliyor"};
+      const {error:statusError}=await db.from("jobs").update(statusPatch).eq("id",document.job_id);
+      if(statusError)throw statusError;
+    }
+    let storageWarning=false;
+    if(document.storage_path){
+      const {error:storageError}=await db.storage.from("invoices").remove([document.storage_path]);
+      if(storageError){console.error("Invoice storage cleanup failed",storageError);storageWarning=true;}
+    }
+    if(state.activePage==="invoices")await loadInvoiceArchive();
+    else if(state.activePage==="newJob"&&value("jobId")===document.job_id)await window.editJob(document.job_id);
+    else if(state.activePage==="jobs")await loadJobs();
+    await loadDashboard();
+    if(storageWarning)toast("Fatura kayıttan silindi; depolama dosyası temizlenirken uyarı oluştu.","error");
+    else toast("Fatura silindi.");
+  }catch(error){handleError(error,"Fatura silinemedi");if(button)setBusy(button,false);}
+};
+
+function invoiceDocumentRow(document){
+  const outgoing=document.kind==="outgoing",kind=outgoing?"outgoing":"incoming";
+  const kindLabel=outgoing?"GİDEN":"GELEN";
+  const uploaded=document.uploaded_at?new Intl.DateTimeFormat("tr-TR",{dateStyle:"short",timeStyle:"short"}).format(new Date(document.uploaded_at)):"-";
+  return `<article class="invoice-document-row">
+    <div class="invoice-type-mark ${kind}">${kindLabel}<br>FATURA</div>
+    <div class="invoice-document-main"><h3 title="${esc(document.original_name)}">${esc(document.original_name)}</h3><p>${esc(document.company_name)} · ${esc(document.hotel_name)}</p>
+      <div class="invoice-document-meta"><span>Check-in: <b>${dateTR(document.check_in)}</b></span><span>${esc(document.job_type)}</span><span>Yüklenme: ${esc(uploaded)}</span><span>${formatBytes(document.size_bytes)}</span>${document.customer_names?`<span>Misafir: ${esc(document.customer_names)}</span>`:""}</div>
+    </div>
+    <div class="invoice-document-actions"><button class="secondary" type="button" onclick="openDocument('${document.document_id}')">Aç</button><button class="primary" type="button" onclick="downloadInvoiceDocument('${document.document_id}')">İndir</button><button class="danger" type="button" onclick="deleteInvoiceDocument('${document.document_id}',this)">Faturayı sil</button></div>
+  </article>`;
+}
