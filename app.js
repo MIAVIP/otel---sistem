@@ -891,7 +891,7 @@ function downloadBlob(blob,name){const url=URL.createObjectURL(blob);const a=doc
 
 function handleError(error, fallback) { console.error(error); toast(`${fallback}: ${error?.message || "Bilinmeyen hata"}`, "error"); }
 // Yanlış yüklenen faturaları silme desteği
-function renderExistingDocuments(documents,kind,targetId){
+function renderExistingDocumentsWithDelete(documents,kind,targetId){
   const rows=documents.filter(document=>(document.kind==="outgoing"?"outgoing":"incoming")===kind);
   $(targetId).innerHTML=rows.map(document=>`<div class="document-item"><span><span class="document-kind ${kind}">${kind==="incoming"?"GELEN":"GİDEN"}</span> ${esc(document.original_name)}</span><div style="display:flex;gap:8px;align-items:center"><button type="button" class="secondary" onclick="openDocument('${document.id}')">Aç</button><button type="button" class="danger" onclick="deleteInvoiceDocument('${document.id}',this)">Faturayı sil</button></div></div>`).join("");
 }
@@ -927,12 +927,15 @@ window.deleteInvoiceDocument=async(id,button)=>{
   }catch(error){handleError(error,"Fatura silinemedi");if(button)setBusy(button,false);}
 };
 
-function invoiceDocumentRow(document){
+function invoiceDocumentRowWithDelete(document){
   const outgoing=document.kind==="outgoing",kind=outgoing?"outgoing":"incoming";
   const kindLabel=outgoing?"GİDEN":"GELEN";
   const uploaded=document.uploaded_at?new Intl.DateTimeFormat("tr-TR",{dateStyle:"short",timeStyle:"short"}).format(new Date(document.uploaded_at)):"-";
   return `<article class="invoice-document-row"><div class="invoice-type-mark ${kind}">${kindLabel}<br>FATURA</div><div class="invoice-document-main"><h3 title="${esc(document.original_name)}">${esc(document.original_name)}</h3><p>${esc(document.company_name)} · ${esc(document.hotel_name)}</p><div class="invoice-document-meta"><span>Check-in: <b>${dateTR(document.check_in)}</b></span><span>${esc(document.job_type)}</span><span>Yüklenme: ${esc(uploaded)}</span><span>${formatBytes(document.size_bytes)}</span>${document.customer_names?`<span>Misafir: ${esc(document.customer_names)}</span>`:""}</div></div><div class="invoice-document-actions"><button class="secondary" type="button" onclick="openDocument('${document.document_id}')">Aç</button><button class="primary" type="button" onclick="downloadInvoiceDocument('${document.document_id}')">İndir</button><button class="danger" type="button" onclick="deleteInvoiceDocument('${document.document_id}',this)">Faturayı sil</button></div></article>`;
 }
 
+
+renderExistingDocuments = renderExistingDocumentsWithDelete;
+invoiceDocumentRow = invoiceDocumentRowWithDelete;
 
 init();
