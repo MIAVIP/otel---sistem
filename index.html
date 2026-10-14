@@ -67,40 +67,63 @@
       </section>
 
       <section id="page-newJob" class="page">
-        <div class="page-head"><div><p class="eyebrow">KAYIT</p><h1 id="jobFormTitle">Yeni İş</h1></div></div>
-        <form id="jobForm" class="panel form-grid">
+        <div class="page-head job-page-head"><div><p class="eyebrow">KONAKLAMA KAYDI</p><h1 id="jobFormTitle">Yeni İş</h1><p class="page-description">Rezervasyon, misafir ve finans bilgilerini adım adım tamamla.</p></div></div>
+        <form id="jobForm" class="job-form">
           <input id="jobId" type="hidden"><input id="jobVersion" type="hidden">
-          <label id="jobCreatedAtField" class="span-2 hidden">İşin sisteme girildiği tarih<input id="jobCreatedAt" type="text" readonly></label>
-          <label>Firma*<select id="companyId" required></select></label>
-          <label class="inline-create">Yeni firma<input id="newCompanyName" placeholder="Firma adı"><button id="addCompanyButton" type="button" class="secondary">Ekle</button></label>
-          <label>Otel*<input id="hotelName" required></label>
-          <label>Oda sayısı*<input id="roomCount" type="number" min="1" value="1" required></label>
-          <label class="span-2">Oda tipi<input id="roomType"></label>
-          <label>Check-in<input id="checkIn" type="date"></label>
-          <label>Check-out<input id="checkOut" type="date"></label>
-          <div class="span-2 customer-picker">
-            <label for="customerSearch">Misafirler</label>
-            <input id="customerSearch" type="search" placeholder="Misafir ismiyle ara..." autocomplete="off">
-            <label class="customer-company-only"><input id="customerCompanyOnly" type="checkbox" checked> Yalnızca seçili firmanın müşterilerini göster</label>
-            <div id="customerSearchResults" class="customer-search-results"></div>
-            <div id="selectedCustomers" class="selected-customers"></div>
-            <select id="customerIds" class="hidden" multiple aria-hidden="true"></select>
-            <small>İsmi yazıp sonuca tıklayarak bir veya birden fazla misafir seçebilirsin.</small>
-          </div>
-          <label class="inline-create span-2">Yeni müşteri<input id="newCustomerName" placeholder="Ad Soyad"><button id="addCustomerButton" type="button" class="secondary">Kaydet ve seç</button></label>
-          <label>Talep eden<input id="requester"></label>
-          <label>Talep kanalı<select id="requestChannel"><option>WhatsApp</option><option>Mail</option><option>Telefon</option><option>Diğer</option></select></label>
-          <label>İş tipi<select id="jobType"><option>YURT İÇİ</option><option>YURT DIŞI</option></select></label>
-          <label>Para birimi<select id="currency"><option>TL</option><option>EUR</option><option>USD</option></select></label>
-          <label>Maliyet (KDV dahil)<input id="cost" type="number" min="0" step="0.01" value="0"></label>
-          <label>Satış (KDV dahil)<input id="sale" type="number" min="0" step="0.01" value="0"></label>
-          <label>Kur<input id="exchangeRate" type="number" min="0.000001" step="0.000001" value="1"></label>
-          <label>Ödeme yöntemi<select id="paymentMethod"><option>Havale</option><option>Kredi Kartı</option><option>Sanal Kart</option><option>Nakit</option><option>Cari</option></select></label>
-          <label id="cardField" class="hidden">Kart<select id="paymentCardId"></select><span class="inline-mini"><input id="newCardName" placeholder="Yeni kart adı / son 4 hane"><button id="addCardButton" type="button" class="secondary">Ekle</button></span></label>
-          <label>Gelen fatura durumu (otel)<select id="hotelInvoiceStatus"><option>Bekliyor</option><option>Geldi</option><option>Gerek Yok</option></select></label>
-          <label>Giden fatura durumu (bizim kestiğimiz)<select id="customerInvoiceStatus"><option>Kesilmedi</option><option>Kesildi</option></select></label>
-          <label>Ödeme<select id="paymentStatus"><option>Bekliyor</option><option>Alındı</option><option>Kısmi</option></select></label>
-          <div class="span-2 invoice-upload-grid">
+          <label id="jobCreatedAtField" class="panel job-created-at hidden">İşin sisteme girildiği tarih<input id="jobCreatedAt" type="text" readonly></label>
+
+          <section class="panel job-form-section">
+            <div class="section-heading"><span class="section-number">1</span><div><h2>Rezervasyon bilgileri</h2><p>Firma, otel, oda ve konaklama tarihleri</p></div></div>
+            <div class="form-grid">
+              <label>Firma*<select id="companyId" required></select></label>
+              <label class="inline-create">Yeni firma<input id="newCompanyName" placeholder="Firma adı"><button id="addCompanyButton" type="button" class="secondary">Ekle</button></label>
+              <label class="span-2">Otel*<input id="hotelName" placeholder="Otel adı" required></label>
+              <label>Oda sayısı*<input id="roomCount" type="number" min="1" value="1" required></label>
+              <label>Oda tipi<input id="roomType" placeholder="Örn. Deluxe King"></label>
+              <label>Check-in<input id="checkIn" type="date"></label>
+              <label>Check-out<input id="checkOut" type="date"></label>
+            </div>
+          </section>
+
+          <section class="panel job-form-section">
+            <div class="section-heading"><span class="section-number">2</span><div><h2>Misafir ve talep bilgileri</h2><p>Konaklayacak kişiler ve rezervasyonu isteyen kişi</p></div></div>
+            <div class="form-grid">
+              <div class="span-2 customer-picker">
+                <label for="customerSearch">Misafirler</label>
+                <input id="customerSearch" type="search" placeholder="Misafir ismiyle ara..." autocomplete="off">
+                <label class="customer-company-only"><input id="customerCompanyOnly" type="checkbox" checked> Yalnızca seçili firmanın müşterilerini göster</label>
+                <div id="customerSearchResults" class="customer-search-results"></div>
+                <div id="selectedCustomers" class="selected-customers"></div>
+                <select id="customerIds" class="hidden" multiple aria-hidden="true"></select>
+                <small>İsmi yazıp sonuca tıklayarak bir veya birden fazla misafir seçebilirsin.</small>
+              </div>
+              <label class="inline-create span-2">Yeni müşteri<input id="newCustomerName" placeholder="Ad Soyad"><button id="addCustomerButton" type="button" class="secondary">Kaydet ve seç</button></label>
+              <label>Talep eden<input id="requester" placeholder="Ad Soyad"></label>
+              <label>Talep kanalı<select id="requestChannel"><option>WhatsApp</option><option>Mail</option><option>Telefon</option><option>Diğer</option></select></label>
+            </div>
+          </section>
+
+          <section class="panel job-form-section finance-section">
+            <div class="section-heading"><span class="section-number">3</span><div><h2>Finans ve ödeme</h2><p>Tutarlar KDV dahil girilir; yurtiçi konaklama KDV oranı %11'dir.</p></div></div>
+            <div class="form-grid finance-grid">
+              <label>İş tipi<select id="jobType"><option>YURT İÇİ</option><option>YURT DIŞI</option></select></label>
+              <label>Para birimi<select id="currency"><option>TL</option><option>EUR</option><option>USD</option></select></label>
+              <label class="money-field">Maliyet (KDV dahil)<span class="money-input"><input id="cost" type="text" inputmode="decimal" value="0,00" autocomplete="off"><b id="costCurrencySymbol">₺</b></span></label>
+              <label class="money-field">Satış (KDV dahil)<span class="money-input"><input id="sale" type="text" inputmode="decimal" value="0,00" autocomplete="off"><b id="saleCurrencySymbol">₺</b></span></label>
+              <label>Kur<input id="exchangeRate" type="number" min="0.000001" step="0.000001" value="1"></label>
+              <label>Ödeme yöntemi<select id="paymentMethod"><option>Havale</option><option>Kredi Kartı</option><option>Sanal Kart</option><option>Nakit</option><option>Cari</option></select></label>
+              <label id="cardField" class="hidden span-2">Kart<select id="paymentCardId"></select><span class="inline-mini"><input id="newCardName" placeholder="Yeni kart adı / son 4 hane"><button id="addCardButton" type="button" class="secondary">Ekle</button></span></label>
+            </div>
+          </section>
+
+          <section class="panel job-form-section">
+            <div class="section-heading"><span class="section-number">4</span><div><h2>Fatura ve durum</h2><p>Fatura dosyaları ve sürecin güncel durumu</p></div></div>
+            <div class="status-grid">
+              <label>Gelen fatura durumu (otel)<select id="hotelInvoiceStatus"><option>Bekliyor</option><option>Geldi</option><option>Gerek Yok</option></select></label>
+              <label>Giden fatura durumu (bizim kestiğimiz)<select id="customerInvoiceStatus"><option>Kesilmedi</option><option>Kesildi</option></select></label>
+              <label>Ödeme<select id="paymentStatus"><option>Bekliyor</option><option>Alındı</option><option>Kısmi</option></select></label>
+            </div>
+            <div class="invoice-upload-grid">
             <section class="invoice-upload-card incoming">
               <div><span class="invoice-direction">GELEN FATURA</span><h3>Otelin bize kestiği fatura</h3><p>Otelden gelen alış/giriş faturalarının PDF veya görsellerini ekle.</p></div>
               <label>Dosya seç (dosya başına en fazla 20 MB)<input id="incomingInvoiceFiles" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple></label>
@@ -111,10 +134,18 @@
               <label>Dosya seç (dosya başına en fazla 20 MB)<input id="outgoingInvoiceFiles" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple></label>
               <div id="existingOutgoingDocuments" class="document-list"></div>
             </section>
-          </div>
-          <label class="span-2">Ekstralar<textarea id="extras"></textarea></label>
-          <label class="span-2">Notlar<textarea id="notes"></textarea></label>
-          <div class="span-2 form-actions"><button id="saveJobButton" class="primary" type="submit">İşi kaydet</button><button id="cancelEditButton" class="secondary hidden" type="button">Vazgeç</button></div>
+            </div>
+          </section>
+
+          <section class="panel job-form-section">
+            <div class="section-heading"><span class="section-number">5</span><div><h2>Ek bilgiler</h2><p>Operasyon notları ve ilave hizmetler</p></div></div>
+            <div class="form-grid">
+              <label>Ekstralar<textarea id="extras" placeholder="Transfer, erken giriş, özel istek..."></textarea></label>
+              <label>Notlar<textarea id="notes" placeholder="Bu işe ait diğer notlar..."></textarea></label>
+            </div>
+          </section>
+
+          <div class="panel form-actions job-form-actions"><div><strong>Kaydetmeye hazır mısın?</strong><small>Bilgileri son kez kontrol edip kaydı tamamla.</small></div><span><button id="cancelEditButton" class="secondary hidden" type="button">Vazgeç</button><button id="saveJobButton" class="primary" type="submit">İşi kaydet</button></span></div>
         </form>
       </section>
 
