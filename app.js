@@ -1,6 +1,7 @@
 const SUPABASE_URL = "https://mpwspnccuaqyitwghqip.supabase.co";
 const SUPABASE_KEY = "sb_publishable_lWeTQWJVlynCDmQWcdDSVQ_E0AfIJJX";
 const PAGE_SIZE = 50;
+const DOMESTIC_VAT_RATE = 0.11;
 const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const state = {
@@ -29,6 +30,39 @@ const moneyTry = amount => money(amount, "TL");
 const dateTR = d => d ? new Intl.DateTimeFormat("tr-TR").format(new Date(`${d}T00:00:00`)) : "-";
 const dateTimeTR = d => d ? new Intl.DateTimeFormat("tr-TR",{dateStyle:"short",timeStyle:"short"}).format(new Date(d)) : "-";
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+const normalizePersonName = name => String(name||"").normalize("NFKC").trim().replace(/\s+/g," ").toLocaleLowerCase("tr-TR");
+const parseMoneyInput = input => {
+  const normalized=String(input??"").trim().replace(/\s/g,"").replace(/\./g,"").replace(",",".").replace(/[^0-9.-]/g,"");
+  const amount=Number(normalized);
+  return Number.isFinite(amount)?amount:0;
+};
+const formatMoneyValue = input => new Intl.NumberFormat("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}).format(parseMoneyInput(input));
+
+function formatMoneyWhileTyping(input){
+  let raw=String(input.value||"").replace(/\s/g,"").replace(/[^0-9,.]/g,"");
+  const commaIndex=raw.lastIndexOf(",");
+  let hasDecimal=commaIndex>=0, integerPart="", decimalPart="";
+  if(hasDecimal){
+    integerPart=raw.slice(0,commaIndex).replace(/\D/g,"");
+    decimalPart=raw.slice(commaIndex+1).replace(/\D/g,"").slice(0,2);
+  }else{
+    const dots=[...raw.matchAll(/\./g)];
+    const lastDot=raw.lastIndexOf(".");
+    const digitsAfter=lastDot>=0?raw.slice(lastDot+1).replace(/\D/g,""):"";
+    hasDecimal=dots.length===1&&digitsAfter.length>0&&digitsAfter.length<=2;
+    integerPart=(hasDecimal?raw.slice(0,lastDot):raw).replace(/\D/g,"");
+    decimalPart=hasDecimal?digitsAfter.slice(0,2):"";
+  }
+  integerPart=(integerPart||"0").replace(/^0+(?=\d)/,"");
+  const grouped=integerPart.replace(/\B(?=(\d{3})+(?!\d))/g,".");
+  input.value=grouped+(hasDecimal?`,`+decimalPart:"");
+}
+
+function setMoneyField(id,amount){ $(id).value=formatMoneyValue(String(amount??0).replace(".",",")); }
+function updateMoneyCurrencySymbols(){
+  const symbol={TL:"₺",EUR:"€",USD:"$"}[value("currency")]||value("currency");
+  $("costCurrencySymbol").textContent=symbol;$("saleCurrencySymbol").textContent=symbol;
+}
 
 function toast(message, type = "success") {
   const el = $("toast");
@@ -115,6 +149,12 @@ function bindEvents() {
   $("currency").addEventListener("change", async () => {
     if (value("currency") === "TL") $("exchangeRate").value = "1";
     else await fetchRate(value("currency"));
+    updateMoneyCurrencySymbols();
+  });
+  ["cost","sale"].forEach(id=>{
+    $(id).addEventListener("input",event=>formatMoneyWhileTyping(event.target));
+    $(id).addEventListener("blur",event=>event.target.value=formatMoneyValue(event.target.value));
+    $(id).addEventListener("focus",event=>event.target.select());
   });
   ["filterCompanyId","filterJobType","filterDateField","filterDateFrom","filterDateTo","filterCurrency","filterPaymentMethod","filterHotelInvoice","filterCustomerInvoice","filterPayment","filterSort"]
     .forEach(id => $(id).addEventListener("change", () => {state.currentPage=0; loadJobs();}));
@@ -372,7 +412,7 @@ async function exportFilteredJobs() {
     if (!jobs.length) return toast("Excel'e aktarılacak iş bulunamadı.", "error");
 
     const rows = jobs.map(job => {
-      const rate = job.job_type === "YURT DIŞI" ? 0 : 0.12;
+      const rate = job.job_type === "YURT DIŞI" ? 0 : DOMESTIC_VAT_RATE;
       const cost = Number(job.cost)||0, sale = Number(job.sale)||0, exchange = Number(job.exchange_rate)||1;
       const costNet = cost/(1+rate), saleNet = sale/(1+rate);
       const profit = sale-cost, profitNet = saleNet-costNet;
@@ -444,7 +484,7 @@ async function saveJob(event) {
     const payload = {
       company_id:value("companyId"), hotel_name:value("hotelName"), room_count:Number(value("roomCount")||1),
       room_type:value("roomType"), check_in:value("checkIn"), check_out:value("checkOut"), requester:value("requester"),
-      request_channel:value("requestChannel"), job_type:value("jobType"), cost:Number(value("cost")||0), sale:Number(value("sale")||0),
+      request_channel:value("requestChannel"), job_type:value("jobType"), cost:parseMoneyInput(value("cost")), sale:parseMoneyInput(value("sale")),
       currency:value("currency"), exchange_rate:Number(value("exchangeRate")||1), payment_method:value("paymentMethod"),
       payment_card_id:value("paymentCardId"), hotel_invoice_status:value("hotelInvoiceStatus"),
       customer_invoice_status:value("customerInvoiceStatus"), payment_status:value("paymentStatus"), extras:value("extras"), notes:value("notes")
@@ -514,6 +554,8 @@ function fillJobForm(job) {
   $("jobFormTitle").textContent="İşi Düzenle"; $("saveJobButton").textContent="Değişiklikleri kaydet"; $("cancelEditButton").classList.remove("hidden");
   const map={jobId:job.id,jobVersion:job.version,companyId:job.company_id,hotelName:job.hotel_name,roomCount:job.room_count,roomType:job.room_type||"",checkIn:job.check_in||"",checkOut:job.check_out||"",requester:job.requester||"",requestChannel:job.request_channel,jobType:job.job_type,cost:job.cost,sale:job.sale,currency:job.currency,exchangeRate:job.exchange_rate,paymentMethod:job.payment_method,paymentCardId:job.payment_card_id||"",hotelInvoiceStatus:job.hotel_invoice_status,customerInvoiceStatus:job.customer_invoice_status,paymentStatus:job.payment_status,extras:job.extras||"",notes:job.notes||""};
   Object.entries(map).forEach(([id,val])=>$(id).value=val);
+  setMoneyField("cost",job.cost);setMoneyField("sale",job.sale);
+  updateMoneyCurrencySymbols();
   $("jobCreatedAt").value=dateTimeTR(job.created_at);$("jobCreatedAtField").classList.remove("hidden");
   const customerIds=(job.customers||[]).map(c=>c.id); [...$("customerIds").options].forEach(o=>o.selected=customerIds.includes(o.value));
   $("customerSearch").value=""; renderSelectedCustomers(); renderCustomerSearchResults();
@@ -528,10 +570,11 @@ function renderExistingDocuments(documents,kind,targetId){
 }
 
 function resetJobForm(go=true) {
-  $("jobForm").reset(); $("jobId").value=""; $("jobVersion").value=""; $("roomCount").value="1"; $("exchangeRate").value="1"; $("cost").value="0"; $("sale").value="0";
+  $("jobForm").reset(); $("jobId").value=""; $("jobVersion").value=""; $("roomCount").value="1"; $("exchangeRate").value="1"; setMoneyField("cost",0); setMoneyField("sale",0);
   $("jobCreatedAt").value="";$("jobCreatedAtField").classList.add("hidden");
   [...$("customerIds").options].forEach(o=>o.selected=false); $("customerSearch").value=""; renderSelectedCustomers(); renderCustomerSearchResults();
   $("jobFormTitle").textContent="Yeni İş"; $("saveJobButton").textContent="İşi kaydet"; $("cancelEditButton").classList.add("hidden"); $("existingIncomingDocuments").innerHTML=""; $("existingOutgoingDocuments").innerHTML=""; toggleCardField();
+  updateMoneyCurrencySymbols();
   if(go) navigate("jobs");
 }
 
@@ -600,6 +643,13 @@ async function addCompanyFromForm() {
   $("companyId").value=data.id; $("newCompanyName").value=""; toast("Firma eklendi.");
 }
 async function addCustomer(name, companyIds=[]) {
+  const normalizedName=normalizePersonName(name);
+  const duplicates=state.customers.filter(customer=>normalizePersonName(customer.name)===normalizedName)
+    .filter(customer=>companyIds.some(companyId=>getCustomerCompanyIds(customer.id).includes(companyId)));
+  if(duplicates.length){
+    const error=new Error("Bu müşteri seçili firmada zaten kayıtlı.");
+    error.code="DUPLICATE_CUSTOMER";error.customer=duplicates[0];throw error;
+  }
   const {data,error}=await db.from("customers").insert({name}).select("id,name").single();
   if(error)throw error;
   if(companyIds.length){
@@ -615,7 +665,10 @@ async function addCustomerFromForm(){
   const name=value("newCustomerName"), companyId=value("companyId");
   if(!name)return toast("Müşteri adını yaz.","error");
   if(!companyId)return toast("Yeni müşteriyi bağlamak için önce işin firmasını seç.","error");
-  try{const data=await addCustomer(name,[companyId]);selectCustomer(data.id);$("newCustomerName").value="";toast("Müşteri firmaya bağlandı ve seçildi.");}catch(e){handleError(e,"Müşteri eklenemedi");}
+  try{const data=await addCustomer(name,[companyId]);selectCustomer(data.id);$("newCustomerName").value="";toast("Müşteri firmaya bağlandı ve seçildi.");}catch(e){
+    if(e.code==="DUPLICATE_CUSTOMER"){selectCustomer(e.customer.id);$("newCustomerName").value="";toast("Bu müşteri firmada zaten kayıtlıydı; mevcut kayıt seçildi.");}
+    else handleError(e,"Müşteri eklenemedi");
+  }
 }
 async function addCustomerFromPage(){
   const name=value("customerPageName");
